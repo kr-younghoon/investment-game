@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calculator, TrendingUp, TrendingDown, LogIn, GraduationCap, Rocket, Clock, Edit2, X, Check } from 'lucide-react';
+import { Calculator, TrendingUp, TrendingDown, LogIn, GraduationCap, Rocket, Clock, Edit2, X, Check, Trophy, Medal } from 'lucide-react';
 import { useSocketSync } from '../hooks/useSocketSync';
 import { useToast } from '../hooks/useToast';
 import NewsModal from '../components/NewsModal';
 import NewsTicker from '../components/NewsTicker';
 import StockCard from '../components/StockCard';
 import TransactionConfirmModal from '../components/TransactionConfirmModal';
+import TradeModal from '../components/TradeModal';
 import Toast from '../components/Toast';
 import { STOCKS } from '../data/initialScenarios';
 
@@ -15,14 +16,15 @@ const STORAGE_KEY = 'mz_investment_portfolio';
 const NICKNAME_STORAGE_KEY = 'mz_investment_nickname';
 
 export default function PlayerPage() {
-  const { gameState, connected, playerActions } = useSocketSync(false);
+  const { gameState, connected, playerActions, playerRank, rankList, setBonusPointsCallback, setTransactionErrorCallback } = useSocketSync(false);
   const [nickname, setNickname] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showNicknameChange, setShowNicknameChange] = useState(false);
   const [showNewsModal, setShowNewsModal] = useState(false);
   const [previousRound, setPreviousRound] = useState(-1);
   const [previousPracticeMode, setPreviousPracticeMode] = useState(false);
-  const { toasts, removeToast, success, info } = useToast();
+  const [hasAttemptedAutoLogin, setHasAttemptedAutoLogin] = useState(false); // 자동 로그인 시도 여부
+  const { toasts, removeToast, success, info, error } = useToast();
   const [portfolio, setPortfolio] = useState({
     cash: INITIAL_CASH,
     stocks: {},
@@ -34,8 +36,10 @@ export default function PlayerPage() {
   const [buyQuantities, setBuyQuantities] = useState({}); // 각 주식의 매수 수량
   const [sellQuantities, setSellQuantities] = useState({}); // 각 주식의 매도 수량
   const [confirmModal, setConfirmModal] = useState(null); // 확인 모달 상태 { type: 'buy'|'sell', stockId, quantity }
+  const [tradeModal, setTradeModal] = useState(null); // 거래 모달 상태 { stockId }
+  const [activeTab, setActiveTab] = useState('info'); // 'info', 'trade', 'portfolio', 'rank'
 
-  // localStorage에서 닉네임 불러오기 및 자동 로그인
+  // localStorage에서 닉네임 불러오기
   useEffect(() => {
     const savedNickname = localStorage.getItem(NICKNAME_STORAGE_KEY);
     if (savedNickname) {
@@ -43,20 +47,24 @@ export default function PlayerPage() {
     }
   }, []);
 
-  // 자동 로그인: 저장된 닉네임이 있고 연결되었을 때
+  // 자동 로그인: 저장된 닉네임이 있고 연결되었을 때 (한 번만 시도)
   useEffect(() => {
+    const savedNickname = localStorage.getItem(NICKNAME_STORAGE_KEY);
     if (
       connected &&
       playerActions &&
-      nickname.trim() &&
+      savedNickname &&
+      savedNickname === nickname.trim() && // 저장된 닉네임과 현재 닉네임이 일치할 때만
       !isLoggedIn &&
-      !nicknameError
+      !nicknameError &&
+      !hasAttemptedAutoLogin // 아직 자동 로그인을 시도하지 않았을 때만
     ) {
       // 짧은 지연 후 자동 로그인 시도 (서버 연결 안정화 대기)
       const autoLoginTimer = setTimeout(() => {
-        if (playerActions && nickname.trim() && !isLoggedIn) {
+        if (playerActions && savedNickname && !isLoggedIn && !hasAttemptedAutoLogin) {
+          setHasAttemptedAutoLogin(true);
           setNicknameError('');
-          playerActions.join(nickname.trim(), (errorMessage) => {
+          playerActions.join(savedNickname, (errorMessage) => {
             // 닉네임 중복 에러 처리
             setNicknameError(errorMessage);
             setIsLoggedIn(false);
@@ -66,7 +74,7 @@ export default function PlayerPage() {
 
       return () => clearTimeout(autoLoginTimer);
     }
-  }, [connected, playerActions, nickname, isLoggedIn, nicknameError]);
+  }, [connected, playerActions, nickname, isLoggedIn, nicknameError, hasAttemptedAutoLogin]);
 
   // 서버에서 포트폴리오 업데이트 수신
   useEffect(() => {
@@ -79,6 +87,28 @@ export default function PlayerPage() {
       }
     }
   }, [gameState.portfolio, nickname, isLoggedIn, nicknameError]);
+
+  // 보너스 포인트 추가 알림 콜백 설정
+  useEffect(() => {
+    if (setBonusPointsCallback) {
+      setBonusPointsCallback((points, totalBonusPoints) => {
+        success(
+          '보너스 포인트 추가',
+          `₩${points.toLocaleString('ko-KR')} 포인트가 추가되었습니다. (총 ₩${totalBonusPoints.toLocaleString('ko-KR')})`,
+          5000
+        );
+      });
+    }
+  }, [setBonusPointsCallback, success]);
+
+  // 거래 오류 알림 콜백 설정
+  useEffect(() => {
+    if (setTransactionErrorCallback) {
+      setTransactionErrorCallback((errorMessage) => {
+        error('거래 실패', errorMessage, 4000);
+      });
+    }
+  }, [setTransactionErrorCallback, error]);
 
   // 라운드 변경 시 뉴스 모달 표시 및 토스트
   useEffect(() => {
@@ -172,6 +202,7 @@ export default function PlayerPage() {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setShowNicknameChange(false);
+    setHasAttemptedAutoLogin(false); // 로그아웃 시 자동 로그인 플래그 리셋
   };
 
   // 주식 매수 확인 요청
@@ -269,6 +300,11 @@ export default function PlayerPage() {
               onChange={(e) => {
                 setNickname(e.target.value);
                 setNicknameError(''); // 입력 시 에러 메시지 초기화
+                // 사용자가 직접 입력하면 자동 로그인 플래그 리셋
+                const savedNickname = localStorage.getItem(NICKNAME_STORAGE_KEY);
+                if (e.target.value !== savedNickname) {
+                  setHasAttemptedAutoLogin(false);
+                }
               }}
               onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
               placeholder="닉네임을 입력하세요"
@@ -476,7 +512,7 @@ export default function PlayerPage() {
                 </div>
               ) : (
                 <>
-                  <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold gradient-text">
+                  <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold gradient-text">
                     {nickname}님의 포트폴리오
                   </h1>
                   <button
@@ -513,339 +549,254 @@ export default function PlayerPage() {
                 )}
               </motion.div>
             )}
-            <div className="text-sm sm:text-base md:text-lg text-gray-600 font-medium">
+            <div className="text-xs sm:text-sm md:text-base text-gray-600 font-medium">
               라운드 {gameState.currentRound + 1} / {gameState.isPracticeMode ? 3 : 12}
             </div>
           </div>
         </motion.div>
 
-        {/* 총 자산 카드 */}
+        {/* 총 자산, 현금, 보너스 포인트, 순위 - 간략 버전 */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="card-modern p-4 sm:p-6 md:p-8 mb-4 sm:mb-6 text-center relative overflow-hidden"
+          className="card-modern p-3 sm:p-4 md:p-6 mb-4 sm:mb-6"
         >
-          {/* 배경 그라데이션 */}
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-100/50 via-pink-100/50 to-blue-100/50"></div>
-          <div className="relative z-10">
-            <div className="text-xs sm:text-sm text-gray-600 mb-2 sm:mb-3 font-medium uppercase tracking-wider">총 자산</div>
-            <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black gradient-text mb-3 sm:mb-4">
-              ₩{totalAsset.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+            <div className="flex-1 min-w-[120px]">
+              <div className="text-xs text-gray-500 mb-1">총 자산</div>
+              <div className="text-lg sm:text-xl md:text-2xl font-bold gradient-text">
+                ₩{totalAsset.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+              </div>
             </div>
-            {gameState.currentRound > 0 && gameState.isGameStarted && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`text-xl font-bold flex items-center justify-center gap-2 ${
-                  isProfit ? 'text-neon-green' : 'text-neon-red'
-                }`}
-              >
-                {isProfit ? (
-                  <TrendingUp className="w-6 h-6" />
-                ) : (
-                  <TrendingDown className="w-6 h-6" />
-                )}
-                {isProfit ? '+' : ''}
-                {profitLoss.toFixed(2)}%
-              </motion.div>
+            <div className="flex-1 min-w-[100px]">
+              <div className="text-xs text-gray-500 mb-1">현금</div>
+              <div className="text-base sm:text-lg md:text-xl font-semibold text-blue-600">
+                ₩{portfolio.cash?.toLocaleString('ko-KR') || 0}
+              </div>
+            </div>
+            <div className="flex-1 min-w-[100px]">
+              <div className="text-xs text-gray-500 mb-1">보너스 포인트</div>
+              <div className="text-base sm:text-lg md:text-xl font-semibold text-green-600">
+                ₩{portfolio.bonusPoints?.toLocaleString('ko-KR') || 0}
+              </div>
+            </div>
+            {playerRank && playerRank.totalPlayers > 0 && (
+              <div className="flex-1 min-w-[100px]">
+                <div className="text-xs text-gray-500 mb-1">순위</div>
+                <div className="flex items-center gap-2">
+                  {playerRank.rank <= 3 ? (
+                    <Trophy className={`w-5 h-5 sm:w-6 sm:h-6 ${
+                      playerRank.rank === 1 ? 'text-yellow-500' :
+                      playerRank.rank === 2 ? 'text-gray-400' :
+                      'text-orange-500'
+                    }`} />
+                  ) : (
+                    <Medal className="w-5 h-5 sm:w-6 sm:h-6 text-purple-500" />
+                  )}
+                  <div className={`text-base sm:text-lg md:text-xl font-bold ${
+                    playerRank.rank === 1 ? 'text-yellow-600' :
+                    playerRank.rank === 2 ? 'text-gray-600' :
+                    playerRank.rank === 3 ? 'text-orange-600' :
+                    'text-purple-600'
+                  }`}>
+                    {playerRank.rank}위
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    / {playerRank.totalPlayers}명
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </motion.div>
 
-        {/* 현금 및 보너스 포인트 */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="card-modern p-3 sm:p-4 md:p-6 mb-4 sm:mb-6"
-        >
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-6">
-            <div className="text-center p-3 sm:p-4 rounded-xl bg-gray-50 border border-gray-200">
-              <label className="block text-gray-600 text-xs sm:text-sm font-medium mb-1 sm:mb-2">현금</label>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-blue-600">
-                ₩{portfolio.cash?.toLocaleString('ko-KR') || 0}
-              </div>
-            </div>
-            <div className="text-center p-3 sm:p-4 rounded-xl bg-gray-50 border border-gray-200">
-              <label className="block text-gray-600 text-xs sm:text-sm font-medium mb-1 sm:mb-2">보너스 포인트</label>
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold text-green-600">
-                ₩{portfolio.bonusPoints?.toLocaleString('ko-KR') || 0}
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 주식 정보 카드 그리드 */}
+        {/* 탭 네비게이션 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="mb-4 sm:mb-6"
+          className="card-modern p-3 sm:p-4 md:p-6 mb-4 sm:mb-6"
         >
-          <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-4 sm:mb-6 gradient-text">
-            주식 정보
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
-            {STOCKS.map((stock, index) => {
-              const price = gameState.stockPrices[stock.id] || stock.basePrice;
-              const changePercent =
-                gameState.currentRound > 0
-                  ? ((price - stock.basePrice) / stock.basePrice) * 100
-                  : 0;
-              const priceHistory =
-                gameState.priceHistory[stock.id]?.slice(
-                  0,
-                  gameState.currentRound + 1
-                ) || [stock.basePrice];
-
-              return (
-                <motion.div
-                  key={stock.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <StockCard
-                    stock={stock}
-                    price={price}
-                    changePercent={changePercent}
-                    priceHistory={priceHistory}
-                  />
-                </motion.div>
-              );
-            })}
+          {/* 탭 버튼 */}
+          <div className="flex gap-2 mb-4 sm:mb-6 border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('info')}
+              className={`px-4 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all border-b-2 ${
+                activeTab === 'info'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              주식 정보
+            </button>
+            <button
+              onClick={() => setActiveTab('trade')}
+              className={`px-4 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all border-b-2 ${
+                activeTab === 'trade'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              주식 거래
+            </button>
+            <button
+              onClick={() => setActiveTab('portfolio')}
+              className={`px-4 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all border-b-2 ${
+                activeTab === 'portfolio'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              포트폴리오 요약
+            </button>
+            <button
+              onClick={() => setActiveTab('rank')}
+              className={`px-4 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all border-b-2 ${
+                activeTab === 'rank'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              순위
+            </button>
           </div>
-        </motion.div>
 
-        {/* 주식 거래 - 카드 형태 */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="mb-4 sm:mb-6"
-        >
-          <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-4 sm:mb-6 gradient-text">
-            주식 거래
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {STOCKS.map((stock, index) => {
-              const price = gameState.stockPrices[stock.id] || stock.basePrice;
-              const quantity = portfolio.stocks?.[stock.id] || 0;
-              const maxBuyable = calculateMaxBuyable(stock.id);
-              const buyQty = buyQuantities[stock.id] || '';
-              const sellQty = sellQuantities[stock.id] || '';
-              const buyAmount = buyQty ? calculateTradeAmount(stock.id, parseInt(buyQty) || 0, 'buy') : 0;
-              const sellAmount = sellQty ? calculateTradeAmount(stock.id, parseInt(sellQty) || 0, 'sell') : 0;
+          {/* 탭 내용 */}
+          <AnimatePresence mode="wait">
+            {activeTab === 'info' && (
+              <motion.div
+                key="info"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
+          <div className="overflow-x-auto -mx-3 sm:mx-0">
+            <table className="w-full min-w-[400px] sm:min-w-0">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">주식명</th>
+                  <th className="text-right py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">현재가</th>
+                  <th className="text-right py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">변동률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {STOCKS.map((stock, index) => {
+                  const price = gameState.stockPrices[stock.id] || stock.basePrice;
+                  const changePercent =
+                    gameState.currentRound > 0
+                      ? ((price - stock.basePrice) / stock.basePrice) * 100
+                      : 0;
+                  const isPositive = changePercent >= 0;
 
-              const currentCash = portfolio.cash || 0;
-              const afterBuyCash = buyQty && parseInt(buyQty) > 0 ? currentCash - buyAmount : currentCash;
-              const afterSellCash = sellQty && parseInt(sellQty) > 0 ? currentCash + sellAmount : currentCash;
-              const value = quantity * price;
-
-              return (
-                <motion.div
-                  key={stock.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="card-modern p-4 sm:p-6 border-2 border-gray-200 hover:border-purple-300 transition-all"
-                >
-                  {/* 주식 헤더 */}
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-900">{stock.name}</h3>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-600">현재가</div>
-                        <div className="text-lg sm:text-xl font-bold text-gray-900">
+                  return (
+                    <tr
+                      key={stock.id}
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="py-2 sm:py-3 px-2 sm:px-4">
+                        <div className="font-semibold text-xs sm:text-sm text-gray-900">{stock.name}</div>
+                      </td>
+                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right">
+                        <div className="text-xs sm:text-sm font-bold text-gray-900">
                           ₩{price.toFixed(2)}
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">보유 수량</span>
-                      <span className="font-semibold text-purple-600">{quantity}주</span>
-                    </div>
-                    {quantity > 0 && (
-                      <div className="flex items-center justify-between text-sm mt-1">
-                        <span className="text-gray-600">평가액</span>
-                        <span className="font-semibold text-purple-700">
-                          ₩{value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 매수 섹션 */}
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-base font-semibold text-green-600 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        매수
-                      </h4>
-                      <span className="text-xs text-gray-500">최대 {maxBuyable}주 가능</span>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={buyQty}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setBuyQuantities({ ...buyQuantities, [stock.id]: val });
-                            if (val && parseInt(val) > maxBuyable) {
-                              setBuyQuantities({ ...buyQuantities, [stock.id]: maxBuyable.toString() });
-                            }
-                          }}
-                          placeholder="매수 수량"
-                          min="1"
-                          max={maxBuyable}
-                          step="1"
-                          className="flex-1 input-modern text-sm sm:text-base py-2.5 sm:py-3"
-                        />
-                        <button
-                          onClick={() => {
-                            if (maxBuyable > 0) {
-                              setBuyQuantities({ ...buyQuantities, [stock.id]: maxBuyable.toString() });
-                            }
-                          }}
-                          className="px-4 py-2.5 sm:py-3 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg transition-all text-sm"
-                          title="전체 현금으로 매수"
-                        >
-                          전체
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (buyQty && parseInt(buyQty) > 0) {
-                              requestBuyStock(stock.id, buyQty);
-                            }
-                          }}
-                          disabled={!buyQty || parseInt(buyQty) <= 0 || parseInt(buyQty) > maxBuyable}
-                          className="px-6 py-2.5 sm:py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg text-sm transition-all shadow-md hover:shadow-lg active:scale-95"
-                        >
-                          매수
-                        </button>
-                      </div>
-                      
-                      {buyQty && parseInt(buyQty) > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1"
-                        >
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="text-gray-600">현재 현금</span>
-                            <span className="font-semibold text-gray-900">₩{currentCash.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="text-green-600">필요 금액</span>
-                            <span className="font-semibold text-green-700">₩{buyAmount.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                          <div className={`flex justify-between text-xs sm:text-sm font-bold pt-1 border-t border-green-200 ${afterBuyCash < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                            <span>거래 후 현금</span>
-                            <span>
-                              ₩{afterBuyCash.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
-                              {afterBuyCash < 0 && <span className="ml-1">⚠️</span>}
-                            </span>
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 매도 섹션 */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-base font-semibold text-red-600 flex items-center gap-2">
-                        <TrendingDown className="w-4 h-4" />
-                        매도
-                      </h4>
-                      <span className="text-xs text-gray-500">보유 {quantity}주</span>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={sellQty}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSellQuantities({ ...sellQuantities, [stock.id]: val });
-                            if (val && parseInt(val) > quantity) {
-                              setSellQuantities({ ...sellQuantities, [stock.id]: quantity.toString() });
-                            }
-                          }}
-                          placeholder="매도 수량"
-                          min="1"
-                          max={quantity}
-                          step="1"
-                          className="flex-1 input-modern text-sm sm:text-base py-2.5 sm:py-3"
-                          disabled={quantity === 0}
-                        />
-                        <button
-                          onClick={() => {
-                            if (quantity > 0) {
-                              setSellQuantities({ ...sellQuantities, [stock.id]: quantity.toString() });
-                            }
-                          }}
-                          disabled={quantity === 0}
-                          className="px-4 py-2.5 sm:py-3 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg transition-all text-sm disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed"
-                          title="전체 보유량 매도"
-                        >
-                          전체
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (sellQty && parseInt(sellQty) > 0) {
-                              requestSellStock(stock.id, sellQty);
-                            }
-                          }}
-                          disabled={quantity === 0 || !sellQty || parseInt(sellQty) <= 0 || parseInt(sellQty) > quantity}
-                          className="px-6 py-2.5 sm:py-3 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg text-sm transition-all shadow-md hover:shadow-lg active:scale-95"
-                        >
-                          매도
-                        </button>
-                      </div>
-                      
-                      {sellQty && parseInt(sellQty) > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1"
-                        >
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="text-gray-600">현재 현금</span>
-                            <span className="font-semibold text-gray-900">₩{currentCash.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm">
-                            <span className="text-red-600">예상 수익</span>
-                            <span className="font-semibold text-red-700">₩{sellAmount.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                          <div className="flex justify-between text-xs sm:text-sm font-bold pt-1 border-t border-red-200 text-red-700">
-                            <span>거래 후 현금</span>
-                            <span>₩{afterSellCash.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}</span>
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                      </td>
+                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right">
+                        <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold ${
+                          isPositive ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {isPositive ? (
+                            <TrendingUp className="w-3 h-3" />
+                          ) : (
+                            <TrendingDown className="w-3 h-3" />
+                          )}
+                          {isPositive ? '+' : ''}
+                          {changePercent.toFixed(2)}%
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </motion.div>
+              </motion.div>
+            )}
 
-        {/* 포트폴리오 요약 */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="card-modern p-6"
-        >
-          <h2 className="text-2xl font-bold mb-6 gradient-text">
-            포트폴리오 요약
-          </h2>
+            {activeTab === 'trade' && (
+              <motion.div
+                key="trade"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                  <table className="w-full min-w-[400px] sm:min-w-0">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">주식명</th>
+                        <th className="text-right py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">현재가</th>
+                        <th className="text-right py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">보유</th>
+                        <th className="text-center py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-600">거래</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {STOCKS.map((stock) => {
+                        const price = gameState.stockPrices[stock.id] || stock.basePrice;
+                        const quantity = portfolio.stocks?.[stock.id] || 0;
+                        const value = quantity * price;
+
+                        return (
+                          <tr
+                            key={stock.id}
+                            className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                          >
+                            <td className="py-2 sm:py-3 px-2 sm:px-4">
+                              <div className="font-semibold text-xs sm:text-sm text-gray-900">{stock.name}</div>
+                              {quantity > 0 && (
+                                <div className="text-[10px] sm:text-xs text-purple-600 mt-0.5">
+                                  평가액: ₩{value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-right">
+                              <div className="text-xs sm:text-sm font-bold text-gray-900">
+                                ₩{price.toFixed(2)}
+                              </div>
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-right">
+                              <div className="text-xs sm:text-sm font-semibold text-purple-600">
+                                {quantity}주
+                              </div>
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                              <button
+                                onClick={() => setTradeModal({ stockId: stock.id })}
+                                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold rounded-lg text-xs sm:text-sm transition-all shadow-md hover:shadow-lg active:scale-95"
+                              >
+                                거래하기
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'portfolio' && (
+              <motion.div
+                key="portfolio"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -876,14 +827,14 @@ export default function PlayerPage() {
                       key={stock.id}
                       className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                     >
-                      <td className="py-2 sm:py-3 px-2 sm:px-4 font-semibold text-sm sm:text-base text-gray-900">{stock.name}</td>
-                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right text-xs sm:text-sm text-gray-700">
+                      <td className="py-2 sm:py-3 px-2 sm:px-4 font-semibold text-xs sm:text-sm text-gray-900">{stock.name}</td>
+                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right text-xs text-gray-700">
                         ₩{price.toFixed(2)}
                       </td>
-                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right text-xs sm:text-sm text-gray-700">
+                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right text-xs text-gray-700">
                         {quantity.toLocaleString('ko-KR')}주
                       </td>
-                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right font-bold text-sm sm:text-base text-purple-600">
+                      <td className="py-2 sm:py-3 px-2 sm:px-4 text-right font-bold text-xs sm:text-sm text-purple-600">
                         ₩{value.toLocaleString('ko-KR', {
                           maximumFractionDigits: 0,
                         })}
@@ -892,18 +843,18 @@ export default function PlayerPage() {
                   );
                 })}
                 <tr className="border-t-2 border-gray-200 font-semibold">
-                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-sm sm:text-base text-gray-700" colSpan="3">
+                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-700" colSpan="3">
                     현금
                   </td>
-                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-right text-sm sm:text-base text-blue-600">
+                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-right text-xs sm:text-sm text-blue-600">
                     ₩{portfolio.cash.toLocaleString('ko-KR')}
                   </td>
                 </tr>
                 <tr className="border-t-2 border-purple-300 font-bold bg-gradient-to-r from-purple-50 to-pink-50">
-                  <td className="py-3 sm:py-4 px-2 sm:px-4 text-sm sm:text-base text-gray-900" colSpan="3">
+                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm text-gray-900" colSpan="3">
                     총 자산
                   </td>
-                  <td className="py-3 sm:py-4 px-2 sm:px-4 text-right gradient-text text-lg sm:text-xl md:text-2xl">
+                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-right gradient-text text-base sm:text-lg md:text-xl">
                     ₩{totalAsset.toLocaleString('ko-KR', {
                       maximumFractionDigits: 0,
                     })}
@@ -912,8 +863,137 @@ export default function PlayerPage() {
               </tbody>
             </table>
           </div>
+              </motion.div>
+            )}
+            {activeTab === 'rank' && (
+              <motion.div
+                key="rank"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                  {rankList.length > 0 ? (
+                    <table className="w-full min-w-[400px] sm:min-w-0">
+                      <thead>
+                        <tr className="border-b-2 border-gray-300">
+                          <th className="text-center py-3 px-4 text-gray-600 font-semibold text-sm uppercase tracking-wider">
+                            순위
+                          </th>
+                          <th className="text-left py-3 px-4 text-gray-600 font-semibold text-sm uppercase tracking-wider">
+                            닉네임
+                          </th>
+                          <th className="text-right py-3 px-4 text-gray-600 font-semibold text-sm uppercase tracking-wider">
+                            총 자산
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rankList.map((player) => (
+                          <tr
+                            key={player.rank}
+                            className={`border-b border-gray-100 transition-colors ${
+                              player.isMe
+                                ? 'bg-gradient-to-r from-purple-50 to-pink-50 font-semibold'
+                                : 'hover:bg-gray-50'
+                            } ${
+                              player.rank === 1
+                                ? 'bg-gradient-to-r from-yellow-50 to-transparent'
+                                : player.rank === 2
+                                ? 'bg-gradient-to-r from-gray-50 to-transparent'
+                                : player.rank === 3
+                                ? 'bg-gradient-to-r from-orange-50 to-transparent'
+                                : ''
+                            }`}
+                          >
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                              <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                {player.rank === 1 ? (
+                                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500" />
+                                ) : player.rank === 2 ? (
+                                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+                                ) : player.rank === 3 ? (
+                                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
+                                ) : (
+                                  <Medal className="w-3 h-3 sm:w-4 sm:h-4 text-purple-500" />
+                                )}
+                                <span
+                                  className={`font-bold text-xs sm:text-sm ${
+                                    player.rank === 1
+                                      ? 'text-yellow-600'
+                                      : player.rank === 2
+                                      ? 'text-gray-600'
+                                      : player.rank === 3
+                                      ? 'text-orange-600'
+                                      : 'text-purple-600'
+                                  }`}
+                                >
+                                  {player.rank}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4">
+                              <div className="flex items-center gap-1 sm:gap-2">
+                                {player.isMe && (
+                                  <span className="text-purple-600 font-bold text-xs sm:text-sm">👑</span>
+                                )}
+                                {player.rank === 1 && !player.isMe && (
+                                  <span className="text-yellow-600 text-xs sm:text-sm">👑</span>
+                                )}
+                                <span
+                                  className={`text-xs sm:text-sm ${
+                                    player.isMe ? 'text-purple-700 font-semibold' : 'text-gray-900'
+                                  }`}
+                                >
+                                  {player.nickname}
+                                </span>
+                                {player.isMe && (
+                                  <span className="text-[10px] sm:text-xs text-purple-600 bg-purple-100 px-1.5 sm:px-2 py-0.5 rounded-full">
+                                    나
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-right">
+                              <span
+                                className={`font-bold text-xs sm:text-sm ${
+                                  player.isMe
+                                    ? 'text-purple-600'
+                                    : player.rank === 1
+                                    ? 'text-yellow-600'
+                                    : player.rank === 2
+                                    ? 'text-gray-600'
+                                    : player.rank === 3
+                                    ? 'text-orange-600'
+                                    : 'text-gray-700'
+                                }`}
+                              >
+                                ₩{player.totalAsset.toLocaleString('ko-KR', {
+                                  maximumFractionDigits: 0,
+                                })}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <Trophy className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-sm sm:text-base">
+                        아직 순위 정보가 없습니다.
+                      </p>
+                      <p className="text-xs sm:text-sm mt-2">
+                        게임이 시작되면 순위가 표시됩니다.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
-          </div>
 
           {/* 뉴스 모달 */}
           <NewsModal
@@ -926,8 +1006,35 @@ export default function PlayerPage() {
           {gameState.isGameStarted && !gameState.isWaitingMode && (
             <NewsTicker headline={gameState.currentNews || ''} />
           )}
+        </div>
         </>
       )}
+
+      {/* 거래 모달 */}
+      {tradeModal && (() => {
+        const stock = STOCKS.find(s => s.id === tradeModal.stockId);
+        const price = gameState.stockPrices[tradeModal.stockId] || stock?.basePrice || 0;
+        const quantity = portfolio.stocks?.[tradeModal.stockId] || 0;
+        const maxBuyable = calculateMaxBuyable(tradeModal.stockId);
+
+        return (
+          <TradeModal
+            isOpen={!!tradeModal}
+            onClose={() => setTradeModal(null)}
+            stock={stock}
+            price={price}
+            quantity={quantity}
+            maxBuyable={maxBuyable}
+            currentCash={portfolio.cash || 0}
+            onBuy={(qty) => {
+              requestBuyStock(tradeModal.stockId, qty);
+            }}
+            onSell={(qty) => {
+              requestSellStock(tradeModal.stockId, qty);
+            }}
+          />
+        );
+      })()}
 
       {/* 거래 확인 모달 */}
       {confirmModal && (() => {

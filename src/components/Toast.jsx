@@ -23,6 +23,13 @@ const toastTypes = {
     textColor: 'text-yellow-700',
     iconColor: 'text-yellow-600',
   },
+  error: {
+    icon: AlertCircle,
+    bgColor: 'bg-red-100',
+    borderColor: 'border-red-400',
+    textColor: 'text-red-700',
+    iconColor: 'text-red-600',
+  },
 };
 
 export default function Toast({ toasts, onRemove }) {

@@ -41,6 +41,8 @@ STOCKS.forEach((stock) => {
 // 연결된 플레이어 수 추적
 let connectedPlayers = new Set();
 let adminSocket = null;
+// 거래 로그 저장 (관리자용)
+const transactionLogs = [];
 
 // 플레이어 데이터 관리 (socketId -> playerData)
 const playersData = new Map(); // { socketId: { nickname, cash, stocks: {}, bonusPoints, totalAsset, transactions: [] } }
@@ -156,6 +158,12 @@ function broadcastPlayerList() {
   const dataMap = gameState.isPracticeMode ? practicePlayersData : playersData;
   const playerList = Array.from(dataMap.entries()).map(([socketId, data]) => {
     const totalAsset = calculatePlayerTotalAsset(socketId, gameState.isPracticeMode);
+    const isOnline = connectedPlayers.has(socketId);
+    // 마지막 거래 라운드 찾기
+    const lastTransaction = data.transactions.length > 0 
+      ? data.transactions[data.transactions.length - 1]
+      : null;
+    const lastTransactionRound = lastTransaction ? lastTransaction.round : null;
     return {
       socketId,
       nickname: data.nickname,
@@ -164,15 +172,45 @@ function broadcastPlayerList() {
       stocks: data.stocks,
       totalAsset: totalAsset,
       transactionCount: data.transactions.length,
+      isOnline: isOnline,
+      lastTransactionRound: lastTransactionRound,
     };
   });
   
+  // 총 자산 기준으로 정렬하고 순위 추가
+  playerList.sort((a, b) => b.totalAsset - a.totalAsset);
+  playerList.forEach((player, index) => {
+    player.rank = index + 1;
+  });
+  
   adminSocket.emit('PLAYER_LIST_UPDATE', playerList);
+  
+  // 모든 플레이어에게 자신의 순위 및 전체 순위 리스트 전송
+  playerList.forEach((player) => {
+    const socket = io.sockets.sockets.get(player.socketId);
+    if (socket) {
+      // 자신의 순위 정보
+      socket.emit('PLAYER_RANK_UPDATE', {
+        rank: player.rank,
+        totalPlayers: playerList.length,
+        totalAsset: player.totalAsset,
+      });
+      // 전체 순위 리스트 (닉네임만 표시, 자신은 강조)
+      const rankList = playerList.map(p => ({
+        rank: p.rank,
+        nickname: p.nickname,
+        totalAsset: p.totalAsset,
+        isMe: p.socketId === player.socketId,
+      }));
+      socket.emit('PLAYER_RANK_LIST_UPDATE', rankList);
+    }
+  });
 }
 
   // Socket.io 연결 처리
   io.on('connection', (socket) => {
-    console.log('클라이언트 연결:', socket.id);
+    const totalConnections = io.sockets.sockets.size;
+    console.log(`클라이언트 연결: ${socket.id} (총 ${totalConnections}개 연결)`);
     
     // 플레이어가 게임 상태 요청
     socket.on('PLAYER_REQUEST_STATE', () => {
@@ -190,25 +228,31 @@ function broadcastPlayerList() {
     });
 
   // 관리자 확인
-  socket.on('ADMIN_AUTH', () => {
-    adminSocket = socket;
-    socket.emit('ADMIN_AUTH_SUCCESS');
-    socket.emit('GAME_STATE_UPDATE', {
-      currentRound: gameState.currentRound,
-      stockPrices: getCurrentPrices(),
-      currentNews: gameState.currentNews,
-      isGameStarted: gameState.isGameStarted,
-      isPracticeMode: gameState.isPracticeMode,
-      isWaitingMode: gameState.isWaitingMode,
-      priceHistory: gameState.stockPrices,
-      connectedPlayers: connectedPlayers.size,
-      countdown: gameState.countdown,
-    });
-    socket.emit('GAME_SETTINGS_UPDATE', gameSettings);
-    // 초기 플레이어 수 전송
-    socket.emit('PLAYER_COUNT_UPDATE', connectedPlayers.size);
-    broadcastPlayerList();
-    console.log('관리자 인증 완료');
+  socket.on('ADMIN_AUTH', (password) => {
+    if (password === 'holydownhill') {
+      adminSocket = socket;
+      socket.emit('ADMIN_AUTH_SUCCESS');
+      socket.emit('GAME_STATE_UPDATE', {
+        currentRound: gameState.currentRound,
+        stockPrices: getCurrentPrices(),
+        currentNews: gameState.currentNews,
+        isGameStarted: gameState.isGameStarted,
+        isPracticeMode: gameState.isPracticeMode,
+        isWaitingMode: gameState.isWaitingMode,
+        priceHistory: gameState.stockPrices,
+        connectedPlayers: connectedPlayers.size,
+        countdown: gameState.countdown,
+      });
+      socket.emit('GAME_SETTINGS_UPDATE', gameSettings);
+      // 초기 플레이어 수 전송
+      socket.emit('PLAYER_COUNT_UPDATE', connectedPlayers.size);
+      // 거래 로그 전송 (최근 100개)
+      socket.emit('TRANSACTION_LOGS_INIT', transactionLogs.slice(-100));
+      broadcastPlayerList();
+      console.log('관리자 인증 완료');
+    } else {
+      socket.emit('ADMIN_AUTH_ERROR', { message: '비밀번호가 올바르지 않습니다.' });
+    }
   });
 
   // 관리자가 게임 상태 요청
@@ -365,10 +409,34 @@ function broadcastPlayerList() {
         gameState.stockPrices[stock.id] = [stock.basePrice];
       });
       gameState.currentNews = gameState.scenarios[0].headline;
-      // 연습 모드 플레이어 데이터 초기화
-      practicePlayersData.clear();
+      
+      // 연습 모드 플레이어 데이터 초기화 (자본금, 주식, 보너스 포인트 모두 초기화)
+      practicePlayersData.forEach((playerData, socketId) => {
+        playerData.cash = INITIAL_CASH;
+        playerData.bonusPoints = 0;
+        playerData.totalAsset = INITIAL_CASH;
+        playerData.transactions = [];
+        // 모든 주식 수량 0으로 초기화
+        STOCKS.forEach((stock) => {
+          playerData.stocks[stock.id] = 0;
+        });
+        
+        // 플레이어에게 초기화된 포트폴리오 전송
+        const playerSocket = io.sockets.sockets.get(socketId);
+        if (playerSocket) {
+          playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
+            cash: playerData.cash,
+            stocks: playerData.stocks,
+            bonusPoints: playerData.bonusPoints,
+            totalAsset: playerData.totalAsset,
+          });
+        }
+      });
+      
+      // 새로 접속한 플레이어를 위한 빈 맵 유지 (기존 데이터는 위에서 초기화됨)
       broadcastGameState();
-      console.log('연습 게임 시작');
+      broadcastPlayerList();
+      console.log('연습 게임 시작 (모든 플레이어 데이터 초기화)');
     }
   });
 
@@ -384,10 +452,32 @@ function broadcastPlayerList() {
         gameState.stockPrices[stock.id] = [stock.basePrice];
       });
       gameState.currentNews = gameState.scenarios[0].headline;
-      // 실제 게임 플레이어 데이터 초기화
-      playersData.clear();
+      // 실제 게임 플레이어 데이터 초기화 (자본금, 주식, 보너스 포인트 모두 초기화)
+      playersData.forEach((playerData, socketId) => {
+        playerData.cash = INITIAL_CASH;
+        playerData.bonusPoints = 0;
+        playerData.totalAsset = INITIAL_CASH;
+        playerData.transactions = [];
+        // 모든 주식 수량 0으로 초기화
+        STOCKS.forEach((stock) => {
+          playerData.stocks[stock.id] = 0;
+        });
+        
+        // 플레이어에게 초기화된 포트폴리오 전송
+        const playerSocket = io.sockets.sockets.get(socketId);
+        if (playerSocket) {
+          playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
+            cash: playerData.cash,
+            stocks: playerData.stocks,
+            bonusPoints: playerData.bonusPoints,
+            totalAsset: playerData.totalAsset,
+          });
+        }
+      });
+      
       broadcastGameState();
-      console.log('실제 게임 시작 (연습 모드 종료)');
+      broadcastPlayerList();
+      console.log('실제 게임 시작 (연습 모드 종료, 모든 플레이어 데이터 초기화)');
     }
   });
 
@@ -550,7 +640,7 @@ function broadcastPlayerList() {
     playerData.stocks[stockId] = (playerData.stocks[stockId] || 0) + quantity;
     
     // 거래 기록
-    playerData.transactions.push({
+    const transaction = {
       type: 'BUY',
       stockId,
       quantity,
@@ -558,7 +648,20 @@ function broadcastPlayerList() {
       totalCost,
       round: gameState.currentRound,
       timestamp: new Date().toISOString(),
-    });
+      nickname: playerData.nickname,
+    };
+    playerData.transactions.push(transaction);
+    
+    // 거래 로그에 추가 (관리자용)
+    transactionLogs.push(transaction);
+    if (transactionLogs.length > 1000) {
+      transactionLogs.shift(); // 최대 1000개까지만 유지
+    }
+    
+    // 관리자에게 거래 로그 전송
+    if (adminSocket) {
+      adminSocket.emit('TRANSACTION_LOG_UPDATE', transaction);
+    }
     
     // 플레이어에게 업데이트 전송
     const totalAsset = calculatePlayerTotalAsset(socket.id, gameState.isPracticeMode);
@@ -602,7 +705,7 @@ function broadcastPlayerList() {
     playerData.stocks[stockId] = currentStockQty - quantity;
     
     // 거래 기록
-    playerData.transactions.push({
+    const transaction = {
       type: 'SELL',
       stockId,
       quantity,
@@ -610,7 +713,20 @@ function broadcastPlayerList() {
       totalRevenue,
       round: gameState.currentRound,
       timestamp: new Date().toISOString(),
-    });
+      nickname: playerData.nickname,
+    };
+    playerData.transactions.push(transaction);
+    
+    // 거래 로그에 추가 (관리자용)
+    transactionLogs.push(transaction);
+    if (transactionLogs.length > 1000) {
+      transactionLogs.shift(); // 최대 1000개까지만 유지
+    }
+    
+    // 관리자에게 거래 로그 전송
+    if (adminSocket) {
+      adminSocket.emit('TRANSACTION_LOG_UPDATE', transaction);
+    }
     
     // 플레이어에게 업데이트 전송
     const totalAsset = calculatePlayerTotalAsset(socket.id, gameState.isPracticeMode);
@@ -654,6 +770,11 @@ function broadcastPlayerList() {
         bonusPoints: playerData.bonusPoints,
         totalAsset: totalAsset,
       });
+      // 포인트 추가 알림 전송
+      playerSocket.emit('BONUS_POINTS_ADDED', {
+        points: points,
+        totalBonusPoints: playerData.bonusPoints,
+      });
     }
     
     // 관리자에게 플레이어 리스트 업데이트
@@ -671,9 +792,10 @@ function broadcastPlayerList() {
   
   // 연결 해제
   socket.on('disconnect', () => {
+    const totalConnections = io.sockets.sockets.size;
     if (socket === adminSocket) {
       adminSocket = null;
-      console.log('관리자 연결 해제');
+      console.log(`관리자 연결 해제: ${socket.id} (총 ${totalConnections}개 연결)`);
     } else {
       connectedPlayers.delete(socket.id);
       // 플레이어 데이터는 유지 (재접속 시 사용)
@@ -684,7 +806,7 @@ function broadcastPlayerList() {
         broadcastPlayerList();
       }
       const nickname = socket.nickname || '알 수 없음';
-      console.log(`플레이어 연결 해제: ${nickname} (socket: ${socket.id}, 총 ${connectedPlayers.size}명)`);
+      console.log(`플레이어 연결 해제: ${nickname} (socket: ${socket.id}, 접속 플레이어: ${connectedPlayers.size}명, 총 연결: ${totalConnections}개)`);
     }
   });
 });

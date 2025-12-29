@@ -43,6 +43,10 @@ export function useToast() {
     return addToast({ type: 'warning', title, message, duration });
   }, [addToast]);
 
+  const error = useCallback((title, message, duration) => {
+    return addToast({ type: 'error', title, message, duration });
+  }, [addToast]);
+
   return {
     toasts,
     addToast,
@@ -50,6 +54,7 @@ export function useToast() {
     success,
     info,
     warning,
+    error,
   };
 }
 
