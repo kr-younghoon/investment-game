@@ -63,7 +63,7 @@ export default function ScenarioEditor({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4 sm:mb-6 md:mb-8">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold gradient-text">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">
                 시나리오 에디터
               </h2>
                 <button

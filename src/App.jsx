@@ -1,18 +1,47 @@
-import { useMemo } from 'react';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from 'react-router-dom';
 import AdminPage from './pages/AdminPage';
+import AdminRoleSelection from './pages/admin/AdminRoleSelection';
+import AdminLoginPage from './pages/admin/AdminLoginPage';
 import PlayerPage from './pages/PlayerPage';
 
 function App() {
-  // URL 경로에 따라 페이지 결정
-  // 플레이어 페이지가 메인(/), 관리자 페이지는 /admin
-  const isAdmin = useMemo(() => {
-    const path = window.location.pathname;
-    return path.includes('/admin');
-  }, []);
-
-  return isAdmin ? <AdminPage /> : <PlayerPage />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<PlayerPage />} />
+        <Route
+          path="/admin/login"
+          element={<AdminLoginPage />}
+        />
+        <Route
+          path="/admin"
+          element={<AdminRoleSelection />}
+        />
+        <Route path="/admin/hint" element={<AdminPage />} />
+        <Route
+          path="/admin/stock"
+          element={<AdminPage />}
+        />
+        <Route
+          path="/admin/developer"
+          element={<AdminPage />}
+        />
+        <Route
+          path="/admin/minigame"
+          element={<AdminPage />}
+        />
+        <Route
+          path="*"
+          element={<Navigate to="/" replace />}
+        />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App;
-
-

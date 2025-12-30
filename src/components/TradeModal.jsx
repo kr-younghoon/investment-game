@@ -12,6 +12,7 @@ export default function TradeModal({
   currentCash,
   onBuy,
   onSell,
+  onRequestOrder, // 오프라인 주문 요청 함수
 }) {
   const [tradeType, setTradeType] = useState('buy'); // 'buy' or 'sell'
   const [tradeQuantity, setTradeQuantity] = useState('');
@@ -244,24 +245,52 @@ export default function TradeModal({
             )}
 
             {/* 확인 버튼 */}
-            <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={!tradeQuantity || parseInt(tradeQuantity) <= 0 || !canAfford || !hasEnough || (tradeType === 'sell' && quantity === 0)}
-                className={`flex-1 px-4 py-3 font-semibold rounded-xl transition-all ${
-                  tradeType === 'buy'
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
-                    : 'bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white'
-                } disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed`}
-              >
-                {tradeType === 'buy' ? '매수' : '매도'}
-              </button>
+            <div className="space-y-2">
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  disabled={!tradeQuantity || parseInt(tradeQuantity) <= 0 || !canAfford || !hasEnough || (tradeType === 'sell' && quantity === 0)}
+                  className={`flex-1 px-4 py-3 font-semibold rounded-xl transition-all ${
+                    tradeType === 'buy'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
+                      : 'bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white'
+                  } disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed`}
+                >
+                  {tradeType === 'buy' ? '매수' : '매도'}
+                </button>
+              </div>
+              {onRequestOrder && (
+                <button
+                  onClick={() => {
+                    const qty = parseInt(tradeQuantity);
+                    if (!tradeQuantity || qty <= 0) {
+                      setError('수량을 입력하세요');
+                      return;
+                    }
+                    if (tradeType === 'buy' && qty > maxBuyable) {
+                      setError(`최대 ${maxBuyable}주만 매수 가능합니다`);
+                      return;
+                    }
+                    if (tradeType === 'sell' && qty > quantity) {
+                      setError(`보유 수량은 ${quantity}주입니다`);
+                      return;
+                    }
+                    onRequestOrder(tradeType === 'buy' ? 'BUY' : 'SELL', stock.id, qty);
+                    onClose();
+                  }}
+                  disabled={!tradeQuantity || parseInt(tradeQuantity) <= 0 || (tradeType === 'sell' && quantity === 0)}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold rounded-xl transition-all disabled:text-gray-600 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <span>📝</span>
+                  운영자에게 주문 요청
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>

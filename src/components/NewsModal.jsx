@@ -43,7 +43,7 @@ export default function NewsModal({
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black gradient-text mb-3 sm:mb-4 leading-tight px-2"
+                  className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black text-gray-900 mb-3 sm:mb-4 leading-tight px-2"
                 >
                   {headline}
                 </motion.h2>

@@ -47,7 +47,7 @@ export default function GameSettings({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4 sm:mb-6 md:mb-8">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold gradient-text flex items-center gap-2 sm:gap-3">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2 sm:gap-3">
                 <Settings className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" />
                 게임 설정
               </h2>
