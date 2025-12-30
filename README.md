@@ -1,4 +1,4 @@
-# 2025 MZ 투자 생존 게임 - Real-time Synchronization Edition
+# 2025 흔적 주식게임 📈 - Real-time Synchronization Edition
 
 React + Socket.io 기반의 실시간 동기화 투자 시뮬레이터입니다. 60명의 플레이어가 동시에 연결하여 관리자가 제어하는 게임 상태를 실시간으로 동기화합니다.
 

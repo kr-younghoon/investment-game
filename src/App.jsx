@@ -8,6 +8,7 @@ import AdminPage from './pages/AdminPage';
 import AdminRoleSelection from './pages/admin/AdminRoleSelection';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import PlayerPage from './pages/PlayerPage';
+import DisplayBoardPage from './pages/DisplayBoardPage';
 
 function App() {
   return (
@@ -34,6 +35,10 @@ function App() {
         <Route
           path="/admin/minigame"
           element={<AdminPage />}
+        />
+        <Route
+          path="/display"
+          element={<DisplayBoardPage />}
         />
         <Route
           path="*"

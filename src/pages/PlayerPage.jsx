@@ -371,7 +371,7 @@ export default function PlayerPage() {
               </div>
             </motion.div>
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-3">
-              2025 MZ 투자 생존
+              2025 흔적 주식게임 📈
             </h1>
             <p className="text-gray-600 text-sm sm:text-base md:text-lg">닉네임을 입력하고 게임을 시작하세요</p>
           </div>
