@@ -29,13 +29,9 @@ export default function AdminPage() {
 
   const hasAuthenticatedRef = useRef(false);
 
-  // 소켓 재연결 시 자동 재인증
+  // 소켓 재연결 시 자동 재인증 및 플레이어 리스트 요청
   useEffect(() => {
-    if (
-      connected &&
-      adminActions &&
-      !hasAuthenticatedRef.current
-    ) {
+    if (connected && adminActions) {
       const savedAdminId =
         localStorage.getItem('admin_auth_id');
       const savedPassword = localStorage.getItem(
@@ -43,23 +39,40 @@ export default function AdminPage() {
       );
 
       if (savedAdminId && savedPassword) {
-        hasAuthenticatedRef.current = true;
-        // 자동 재인증
-        adminActions.authenticate(
-          {
-            adminId: savedAdminId,
-            password: savedPassword,
-          },
-          () => {
-            console.log('[AdminPage] 자동 재인증 성공');
-          },
-          () => {
-            // 재인증 실패 시 로그인 페이지로 이동
-            localStorage.removeItem('admin_auth_id');
-            localStorage.removeItem('admin_auth_password');
-            navigate('/admin/login');
+        if (!hasAuthenticatedRef.current) {
+          hasAuthenticatedRef.current = true;
+          // 자동 재인증
+          adminActions.authenticate(
+            {
+              adminId: savedAdminId,
+              password: savedPassword,
+            },
+            () => {
+              console.log('[AdminPage] 자동 재인증 성공');
+              // 인증 성공 후 게임 상태 및 플레이어 리스트 요청
+              if (adminActions && adminActions.requestState) {
+                adminActions.requestState();
+              }
+              if (adminActions && adminActions.requestPlayerList) {
+                adminActions.requestPlayerList();
+              }
+            },
+            () => {
+              // 재인증 실패 시 로그인 페이지로 이동
+              localStorage.removeItem('admin_auth_id');
+              localStorage.removeItem('admin_auth_password');
+              navigate('/admin/login');
+            }
+          );
+        } else {
+          // 이미 인증된 상태에서도 플레이어 리스트 요청 (페이지 새로고침 등)
+          if (adminActions && adminActions.requestPlayerList) {
+            adminActions.requestPlayerList();
           }
-        );
+          if (adminActions && adminActions.requestState) {
+            adminActions.requestState();
+          }
+        }
       } else {
         // 저장된 인증 정보가 없으면 로그인 페이지로 이동
         navigate('/admin/login');

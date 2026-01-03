@@ -14,7 +14,7 @@ const STORAGE_KEY = 'mz_investment_portfolio';
 const NICKNAME_STORAGE_KEY = 'mz_investment_nickname';
 
 export default function PlayerPage() {
-  const { gameState, connected, playerActions, playerRank, rankList, setBonusPointsCallback, setTransactionErrorCallback, setHintsUpdateCallback, setOrderApprovedCallback, setOrderRejectedCallback, setTradeExecutedCallback, setNicknameErrorCallback, socket } = useSocketSync(false);
+  const { gameState, connected, playerActions, playerRank, rankList, setBonusPointsCallback, setTransactionErrorCallback, setHintsUpdateCallback, setTradeExecutedCallback, setNicknameErrorCallback, socket } = useSocketSync(false);
   const [nickname, setNickname] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showNicknameChange, setShowNicknameChange] = useState(false);
@@ -302,22 +302,6 @@ export default function PlayerPage() {
   };
 
 
-  // 주문 승인/거부 알림 콜백 설정
-  useEffect(() => {
-    if (setOrderApprovedCallback) {
-      setOrderApprovedCallback((data) => {
-        success('주문 승인', data.message || '주문이 승인되었습니다.', 3000);
-      });
-    }
-  }, [setOrderApprovedCallback, success]);
-
-  useEffect(() => {
-    if (setOrderRejectedCallback) {
-      setOrderRejectedCallback((data) => {
-        error('주문 거부', data.message || '주문이 거부되었습니다.', 3000);
-      });
-    }
-  }, [setOrderRejectedCallback, error]);
 
   // 거래 체결 알림 콜백 설정
   useEffect(() => {

@@ -57,7 +57,6 @@ export function useSocketSync(isAdmin = false) {
     []
   ); // 관리자용 거래 로그
   const [hintRequests, setHintRequests] = useState([]); // 관리자용 힌트 구매 요청 목록
-  const [pendingOrders, setPendingOrders] = useState([]); // 관리자용 대기 주문 목록
   const [gameSettings, setGameSettings] = useState({
     initialCash: 10000,
     totalRounds: 12,
@@ -67,8 +66,6 @@ export function useSocketSync(isAdmin = false) {
   const bonusPointsCallbackRef = useRef(null); // 보너스 포인트 추가 콜백
   const transactionErrorCallbackRef = useRef(null); // 거래 오류 콜백
   const hintsUpdateCallbackRef = useRef(null); // 힌트 업데이트 콜백
-  const orderApprovedCallbackRef = useRef(null); // 주문 승인 콜백
-  const orderRejectedCallbackRef = useRef(null); // 주문 거부 콜백
   const tradeExecutedCallbackRef = useRef(null); // 거래 체결 콜백
   const adminErrorCallbackRef = useRef(null); // 관리자 에러 콜백
   const roundTimerEndCallbackRef = useRef(null); // 라운드 타이머 종료 콜백 (관리자만)
@@ -263,53 +260,15 @@ export function useSocketSync(isAdmin = false) {
       }
     });
 
-    // 플레이어 전용: 주문 관련 이벤트
+    // 플레이어 전용: 거래 체결 알림
     if (!isAdmin) {
-      const handleOrderRequested = (data) => {
-        console.log('주문 접수:', data);
-        // 주문 접수 성공 알림은 이미 PlayerPage에서 처리됨
-      };
-
-      const handleOrderApproved = (data) => {
-        console.log('주문 승인:', data);
-        if (orderApprovedCallbackRef.current) {
-          orderApprovedCallbackRef.current(data);
-        }
-      };
-
-      const handleOrderRejected = (data) => {
-        console.log('주문 거부:', data);
-        if (orderRejectedCallbackRef.current) {
-          orderRejectedCallbackRef.current(data);
-        }
-      };
-
-      const handleOrderError = (error) => {
-        console.error('주문 오류:', error.message);
-        if (transactionErrorCallbackRef.current) {
-          transactionErrorCallbackRef.current(
-            error.message
-          );
-        }
-      };
-
-      // 거래 체결 알림
       const handleTradeExecuted = (data) => {
         if (tradeExecutedCallbackRef.current) {
           tradeExecutedCallbackRef.current(data);
         }
       };
 
-      socket.off('ORDER_REQUESTED', handleOrderRequested);
-      socket.off('ORDER_APPROVED', handleOrderApproved);
-      socket.off('ORDER_REJECTED', handleOrderRejected);
-      socket.off('ORDER_ERROR', handleOrderError);
       socket.off('TRADE_EXECUTED', handleTradeExecuted);
-
-      socket.on('ORDER_REQUESTED', handleOrderRequested);
-      socket.on('ORDER_APPROVED', handleOrderApproved);
-      socket.on('ORDER_REJECTED', handleOrderRejected);
-      socket.on('ORDER_ERROR', handleOrderError);
       socket.on('TRADE_EXECUTED', handleTradeExecuted);
     }
 
@@ -421,10 +380,6 @@ export function useSocketSync(isAdmin = false) {
         socket.on('TRANSACTION_LOGS_INIT', (logs) => {
           setTransactionLogs(logs);
         });
-        // 대기 주문 목록 수신
-        socket.on('PENDING_ORDERS_UPDATE', (orders) => {
-          setPendingOrders(orders);
-        });
       }
 
       const handlePlayerCountUpdate = (count) => {
@@ -489,6 +444,7 @@ export function useSocketSync(isAdmin = false) {
       socket.on('ROUND_TIMER_END', handleRoundTimerEnd);
 
       const handlePlayerListUpdate = (list) => {
+        console.log('[useSocketSync] 플레이어 리스트 업데이트:', list.length, '명');
         setPlayerList(list);
       };
 
@@ -609,21 +565,6 @@ export function useSocketSync(isAdmin = false) {
             hintContent,
           });
         },
-        getPendingOrders: () => {
-          socketRef.current?.emit(
-            'ADMIN_REQUEST_PENDING_ORDERS'
-          );
-        },
-        approveOrder: (orderId) => {
-          socketRef.current?.emit('ADMIN_APPROVE_ORDER', {
-            orderId,
-          });
-        },
-        rejectOrder: (orderId) => {
-          socketRef.current?.emit('ADMIN_REJECT_ORDER', {
-            orderId,
-          });
-        },
         executeTrade: (
           socketId,
           type,
@@ -635,24 +576,6 @@ export function useSocketSync(isAdmin = false) {
             type,
             stockId,
             quantity,
-          });
-        },
-        requestPendingMiniGames: () => {
-          socketRef.current?.emit(
-            'ADMIN_REQUEST_PENDING_MINIGAMES'
-          );
-        },
-        approveMiniGame: (requestId) => {
-          socketRef.current?.emit(
-            'ADMIN_APPROVE_MINIGAME',
-            {
-              requestId,
-            }
-          );
-        },
-        rejectMiniGame: (requestId) => {
-          socketRef.current?.emit('ADMIN_REJECT_MINIGAME', {
-            requestId,
           });
         },
         kickPlayer: (socketId) => {
@@ -726,21 +649,6 @@ export function useSocketSync(isAdmin = false) {
             stockId,
             quantity,
           });
-        },
-        requestOrder: (type, stockId, quantity) => {
-          socketRef.current?.emit('PLAYER_REQUEST_ORDER', {
-            type,
-            stockId,
-            quantity,
-          });
-        },
-        completeMiniGame: (score) => {
-          socketRef.current?.emit(
-            'PLAYER_COMPLETE_MINIGAME',
-            {
-              score,
-            }
-          );
         },
       }
     : null;
@@ -833,7 +741,6 @@ export function useSocketSync(isAdmin = false) {
     playerRank, // 플레이어용 순위 정보
     rankList, // 플레이어용 전체 순위 리스트
     transactionLogs, // 관리자용 거래 로그
-    pendingOrders, // 관리자용 대기 주문 목록
     gameSettings, // 게임 설정
     adminActions,
     playerActions,
@@ -841,8 +748,6 @@ export function useSocketSync(isAdmin = false) {
     setBonusPointsCallback, // 보너스 포인트 콜백 설정 함수
     setTransactionErrorCallback, // 거래 오류 콜백 설정 함수
     setHintsUpdateCallback, // 힌트 업데이트 콜백 설정 함수
-    setOrderApprovedCallback, // 주문 승인 콜백 설정 함수
-    setOrderRejectedCallback, // 주문 거부 콜백 설정 함수
     setTradeExecutedCallback, // 거래 체결 콜백 설정 함수
     setNicknameErrorCallback, // 닉네임 에러 콜백 설정 함수
     setAdminErrorCallback, // 관리자 에러 콜백 설정 함수

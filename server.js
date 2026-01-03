@@ -50,10 +50,6 @@ let adminSockets = new Set(); // 여러 관리자 지원
 const adminAuthMap = new Map(); // { socketId: adminId }
 // 거래 로그 저장 (관리자용)
 const transactionLogs = [];
-// 오프라인 주문 대기 목록
-const pendingOrders = []; // { id, nickname, socketId, type: 'BUY'|'SELL', stockId, quantity, requestedAt, isPractice }
-// 미니게임 완료 요청 목록
-const pendingMiniGames = []; // { id, nickname, socketId, score, reward, requestedAt, isPractice }
 // 카운트다운 interval 저장
 let countdownInterval = null;
 // 라운드 타이머 interval 저장
@@ -295,11 +291,18 @@ function broadcastGameState() {
 
 // 플레이어 리스트 브로드캐스트 (모든 관리자에게)
 function broadcastPlayerList() {
-  if (adminSockets.size === 0) return;
+  if (adminSockets.size === 0) {
+    console.log('[broadcastPlayerList] 관리자가 없어서 브로드캐스트 스킵');
+    return;
+  }
 
   const dataMap = gameState.isPracticeMode
     ? practicePlayersData
     : playersData;
+
+  console.log(
+    `[broadcastPlayerList] dataMap 크기: ${dataMap.size}, connectedPlayers 크기: ${connectedPlayers.size}`
+  );
 
   // 닉네임별로 그룹화하여 중복 제거 (연결된 플레이어 우선)
   const nicknameMap = new Map();
@@ -357,6 +360,12 @@ function broadcastPlayerList() {
   console.log(
     `[broadcastPlayerList] 플레이어 리스트 브로드캐스트: ${playerList.length}명, 관리자: ${adminSockets.size}명`
   );
+  if (playerList.length > 0) {
+    console.log(
+      `[broadcastPlayerList] 플레이어 목록:`,
+      playerList.map((p) => `${p.nickname} (${p.isOnline ? '온라인' : '오프라인'})`)
+    );
+  }
   adminSockets.forEach((adminSocket) => {
     adminSocket.emit('PLAYER_LIST_UPDATE', playerList);
   });
@@ -465,13 +474,6 @@ io.on('connection', (socket) => {
     socket.emit('TRANSACTION_LOGS_INIT', dbTransactions);
     // 메모리에도 동기화
     transactionLogs.length = 0;
-    // 대기 중인 주문 목록 전송
-    socket.emit('PENDING_ORDERS_UPDATE', pendingOrders);
-    // 대기 중인 미니게임 목록 전송
-    socket.emit(
-      'PENDING_MINIGAMES_UPDATE',
-      pendingMiniGames
-    );
     transactionLogs.push(...dbTransactions);
     // 운영자 계정 목록 전송
     const admins = dbHelpers.getAllAdmins();
@@ -737,8 +739,17 @@ io.on('connection', (socket) => {
     connectedPlayers.add(socket.id);
     socket.nickname = trimmedNickname;
 
+    console.log(
+      `[PLAYER_JOIN] 플레이어 데이터 저장 완료: ${trimmedNickname}, socket.id: ${socket.id}, dataMap 크기: ${dataMap.size}`
+    );
+
     // 플레이어에게 현재 포트폴리오 전송
     const playerData = dataMap.get(socket.id);
+    if (!playerData) {
+      console.error(
+        `[PLAYER_JOIN] 오류: 플레이어 데이터를 찾을 수 없음 - ${trimmedNickname}, socket.id: ${socket.id}`
+      );
+    }
     // 기존 bonusPoints가 있으면 cash에 통합
     if (
       playerData.bonusPoints &&
@@ -1482,437 +1493,6 @@ io.on('connection', (socket) => {
     );
   });
 
-  // 플레이어: 미니게임 완료 요청
-  socket.on('PLAYER_COMPLETE_MINIGAME', (data) => {
-    const { score } = data;
-    const dataMap = gameState.isPracticeMode
-      ? practicePlayersData
-      : playersData;
-    const playerData = dataMap.get(socket.id);
-
-    if (!playerData) {
-      socket.emit('MINIGAME_ERROR', {
-        message: '플레이어 데이터를 찾을 수 없습니다.',
-      });
-      return;
-    }
-
-    if (!gameState.isGameStarted) {
-      socket.emit('MINIGAME_ERROR', {
-        message: '게임이 시작되지 않았습니다.',
-      });
-      return;
-    }
-
-    // 미니게임 요청 ID 생성
-    const requestId = `minigame_${Date.now()}_${Math.random()
-      .toString(36)
-      .substring(2, 11)}`;
-
-    // 미니게임 요청 정보 생성
-    const minigameRequest = {
-      id: requestId,
-      nickname: playerData.nickname,
-      socketId: socket.id,
-      score: score,
-      reward: score, // 점수 = 보상
-      requestedAt: new Date().toISOString(),
-      isPractice: gameState.isPracticeMode,
-    };
-
-    // 대기 목록에 추가
-    pendingMiniGames.push(minigameRequest);
-
-    // 모든 관리자에게 미니게임 완료 알림
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'PENDING_MINIGAMES_UPDATE',
-        pendingMiniGames
-      );
-    });
-
-    // 플레이어에게 요청 접수 확인
-    socket.emit('MINIGAME_REQUESTED', {
-      requestId,
-      message:
-        '미니게임 완료 요청이 접수되었습니다. 운영자 승인을 기다려주세요.',
-    });
-
-    const mode = gameState.isPracticeMode
-      ? '[연습]'
-      : '[실제]';
-    console.log(
-      `${mode} ${playerData.nickname} 미니게임 완료 요청: ${score}점 (보상: ${score}원)`
-    );
-  });
-
-  // 플레이어: 오프라인 주문 요청
-  socket.on('PLAYER_REQUEST_ORDER', (data) => {
-    const { type, stockId, quantity } = data; // type: 'BUY' or 'SELL'
-    const dataMap = gameState.isPracticeMode
-      ? practicePlayersData
-      : playersData;
-    const playerData = dataMap.get(socket.id);
-
-    if (!playerData) {
-      socket.emit('ORDER_ERROR', {
-        message: '플레이어 데이터를 찾을 수 없습니다.',
-      });
-      return;
-    }
-
-    // 주문 ID 생성
-    const orderId = `order_${Date.now()}_${Math.random()
-      .toString(36)
-      .substring(2, 11)}`;
-
-    // 주문 정보 생성
-    const order = {
-      id: orderId,
-      nickname: playerData.nickname,
-      socketId: socket.id,
-      type: type, // 'BUY' or 'SELL'
-      stockId: stockId,
-      quantity: quantity,
-      requestedAt: new Date().toISOString(),
-      isPractice: gameState.isPracticeMode,
-    };
-
-    // 대기 목록에 추가
-    pendingOrders.push(order);
-
-    // 모든 관리자에게 주문 알림
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'PENDING_ORDERS_UPDATE',
-        pendingOrders
-      );
-    });
-
-    // 플레이어에게 주문 접수 확인
-    socket.emit('ORDER_REQUESTED', {
-      orderId,
-      message:
-        '주문이 접수되었습니다. 관리자 승인을 기다려주세요.',
-    });
-
-    const mode = gameState.isPracticeMode
-      ? '[연습]'
-      : '[실제]';
-    console.log(
-      `${mode} ${playerData.nickname} 주문 요청: ${type} ${stockId} ${quantity}주`
-    );
-  });
-
-  // 관리자: 대기 주문 목록 요청
-  socket.on('ADMIN_REQUEST_PENDING_ORDERS', () => {
-    if (adminSockets.has(socket)) {
-      socket.emit('PENDING_ORDERS_UPDATE', pendingOrders);
-    }
-  });
-
-  // 관리자: 주문 승인
-  socket.on('ADMIN_APPROVE_ORDER', (data) => {
-    if (!adminSockets.has(socket)) return;
-
-    const { orderId } = data;
-    const orderIndex = pendingOrders.findIndex(
-      (o) => o.id === orderId
-    );
-
-    if (orderIndex === -1) {
-      socket.emit('ORDER_APPROVAL_ERROR', {
-        message: '주문을 찾을 수 없습니다.',
-      });
-      return;
-    }
-
-    const order = pendingOrders[orderIndex];
-    const dataMap = order.isPractice
-      ? practicePlayersData
-      : playersData;
-    const playerData = dataMap.get(order.socketId);
-
-    if (!playerData) {
-      socket.emit('ORDER_APPROVAL_ERROR', {
-        message: '플레이어 데이터를 찾을 수 없습니다.',
-      });
-      pendingOrders.splice(orderIndex, 1);
-      adminSockets.forEach((adminSocket) => {
-        adminSocket.emit(
-          'PENDING_ORDERS_UPDATE',
-          pendingOrders
-        );
-      });
-      return;
-    }
-
-    const currentPrices = getCurrentPrices();
-    const price = currentPrices[order.stockId];
-
-    if (order.type === 'BUY') {
-      const totalCost = price * order.quantity;
-
-      // 현금 확인
-      if (playerData.cash < totalCost) {
-        socket.emit('ORDER_APPROVAL_ERROR', {
-          message: `${playerData.nickname}의 현금이 부족합니다.`,
-        });
-        return;
-      }
-
-      // 매수 처리
-      playerData.cash -= totalCost;
-      playerData.stocks[order.stockId] =
-        (playerData.stocks[order.stockId] || 0) +
-        order.quantity;
-
-      // 거래 기록
-      const transaction = {
-        type: 'BUY',
-        stockId: order.stockId,
-        quantity: order.quantity,
-        price: price,
-        totalCost: totalCost,
-        round: gameState.currentRound,
-        timestamp: new Date().toISOString(),
-        nickname: playerData.nickname,
-      };
-      playerData.transactions.push(transaction);
-      transactionLogs.push(transaction);
-
-      // 데이터베이스에 저장
-      if (playerData.dbId) {
-        const totalAsset = calculatePlayerTotalAsset(
-          order.socketId,
-          order.isPractice
-        );
-        dbHelpers.updatePlayerCashById(
-          playerData.dbId,
-          playerData.cash,
-          totalAsset,
-          order.isPractice
-        );
-        dbHelpers.savePlayerStock(
-          playerData.dbId,
-          order.stockId,
-          playerData.stocks[order.stockId],
-          order.isPractice
-        );
-        const adminId = adminAuthMap.get(socket.id) || null;
-        dbHelpers.saveTransaction(
-          playerData.dbId,
-          playerData.nickname,
-          'BUY',
-          order.stockId,
-          order.quantity,
-          price,
-          totalCost,
-          null,
-          null,
-          null,
-          null,
-          gameState.currentRound,
-          adminId,
-          order.isPractice
-        );
-      }
-
-      // 플레이어에게 업데이트 전송
-      const totalAsset = calculatePlayerTotalAsset(
-        order.socketId,
-        order.isPractice
-      );
-      playerData.totalAsset = totalAsset;
-      const playerSocket = io.sockets.sockets.get(
-        order.socketId
-      );
-      if (playerSocket) {
-        playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-          cash: playerData.cash,
-          stocks: playerData.stocks,
-          bonusPoints: 0,
-          totalAsset: totalAsset,
-        });
-        playerSocket.emit('ORDER_APPROVED', {
-          orderId,
-          message: '주문이 승인되었습니다.',
-        });
-      }
-
-      // 관리자에게 거래 로그 전송
-      adminSockets.forEach((adminSocket) => {
-        adminSocket.emit(
-          'TRANSACTION_LOG_UPDATE',
-          transaction
-        );
-      });
-    } else if (order.type === 'SELL') {
-      const currentStockQty =
-        playerData.stocks[order.stockId] || 0;
-
-      // 보유 주식 확인
-      if (currentStockQty < order.quantity) {
-        socket.emit('ORDER_APPROVAL_ERROR', {
-          message: `${playerData.nickname}의 보유 주식이 부족합니다.`,
-        });
-        return;
-      }
-
-      const totalRevenue = price * order.quantity;
-
-      // 매도 처리
-      playerData.cash += totalRevenue;
-      playerData.stocks[order.stockId] =
-        currentStockQty - order.quantity;
-
-      // 거래 기록
-      const transaction = {
-        type: 'SELL',
-        stockId: order.stockId,
-        quantity: order.quantity,
-        price: price,
-        totalRevenue: totalRevenue,
-        round: gameState.currentRound,
-        timestamp: new Date().toISOString(),
-        nickname: playerData.nickname,
-      };
-      playerData.transactions.push(transaction);
-      transactionLogs.push(transaction);
-
-      // 데이터베이스에 저장
-      if (playerData.dbId) {
-        const totalAsset = calculatePlayerTotalAsset(
-          order.socketId,
-          order.isPractice
-        );
-        dbHelpers.updatePlayerCashById(
-          playerData.dbId,
-          playerData.cash,
-          totalAsset,
-          order.isPractice
-        );
-        dbHelpers.savePlayerStock(
-          playerData.dbId,
-          order.stockId,
-          playerData.stocks[order.stockId],
-          order.isPractice
-        );
-        const adminId = adminAuthMap.get(socket.id) || null;
-        dbHelpers.saveTransaction(
-          playerData.dbId,
-          playerData.nickname,
-          'SELL',
-          order.stockId,
-          order.quantity,
-          price,
-          null,
-          totalRevenue,
-          null,
-          null,
-          null,
-          gameState.currentRound,
-          adminId,
-          order.isPractice
-        );
-      }
-
-      // 플레이어에게 업데이트 전송
-      const totalAsset = calculatePlayerTotalAsset(
-        order.socketId,
-        order.isPractice
-      );
-      playerData.totalAsset = totalAsset;
-      const playerSocket = io.sockets.sockets.get(
-        order.socketId
-      );
-      if (playerSocket) {
-        playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-          cash: playerData.cash,
-          stocks: playerData.stocks,
-          bonusPoints: 0,
-          totalAsset: totalAsset,
-        });
-        playerSocket.emit('ORDER_APPROVED', {
-          orderId,
-          message: '주문이 승인되었습니다.',
-        });
-      }
-
-      // 관리자에게 거래 로그 전송
-      adminSockets.forEach((adminSocket) => {
-        adminSocket.emit(
-          'TRANSACTION_LOG_UPDATE',
-          transaction
-        );
-      });
-    }
-
-    // 주문 목록에서 제거
-    pendingOrders.splice(orderIndex, 1);
-
-    // 관리자에게 업데이트된 주문 목록 전송
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'PENDING_ORDERS_UPDATE',
-        pendingOrders
-      );
-    });
-
-    // 플레이어 리스트 업데이트
-    broadcastPlayerList();
-
-    const mode = order.isPractice ? '[연습]' : '[실제]';
-    console.log(
-      `${mode} ${playerData.nickname} 주문 승인: ${order.type} ${order.stockId} ${order.quantity}주`
-    );
-  });
-
-  // 관리자: 주문 거부
-  socket.on('ADMIN_REJECT_ORDER', (data) => {
-    if (!adminSockets.has(socket)) return;
-
-    const { orderId } = data;
-    const orderIndex = pendingOrders.findIndex(
-      (o) => o.id === orderId
-    );
-
-    if (orderIndex === -1) {
-      socket.emit('ORDER_REJECTION_ERROR', {
-        message: '주문을 찾을 수 없습니다.',
-      });
-      return;
-    }
-
-    const order = pendingOrders[orderIndex];
-
-    // 플레이어에게 거부 알림
-    const playerSocket = io.sockets.sockets.get(
-      order.socketId
-    );
-    if (playerSocket) {
-      playerSocket.emit('ORDER_REJECTED', {
-        orderId,
-        message: '주문이 거부되었습니다.',
-      });
-    }
-
-    // 주문 목록에서 제거
-    pendingOrders.splice(orderIndex, 1);
-
-    // 관리자에게 업데이트된 주문 목록 전송
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'PENDING_ORDERS_UPDATE',
-        pendingOrders
-      );
-    });
-
-    console.log(
-      `주문 거부: ${order.nickname} ${order.type} ${order.stockId} ${order.quantity}주`
-    );
-  });
-
   // 관리자: 직접 거래 실행
   socket.on('ADMIN_EXECUTE_TRADE', (data) => {
     if (!adminSockets.has(socket)) return;
@@ -2330,207 +1910,6 @@ io.on('connection', (socket) => {
   });
 
   // 관리자: 힌트 부여
-  // 관리자: 미니게임 완료 요청 목록 요청
-  socket.on('ADMIN_REQUEST_PENDING_MINIGAMES', () => {
-    if (adminSockets.has(socket)) {
-      socket.emit(
-        'PENDING_MINIGAMES_UPDATE',
-        pendingMiniGames
-      );
-    }
-  });
-
-  // 관리자: 미니게임 승인 (보상 지급)
-  socket.on('ADMIN_APPROVE_MINIGAME', (data) => {
-    if (!adminSockets.has(socket)) return;
-
-    // 게임이 시작되지 않았으면 보상 지급 불가
-    if (!gameState.isGameStarted) {
-      socket.emit('ADMIN_ERROR', {
-        message:
-          '게임이 시작되지 않았습니다. 게임을 시작한 후 보상을 지급할 수 있습니다.',
-      });
-      return;
-    }
-
-    const { requestId } = data;
-    const requestIndex = pendingMiniGames.findIndex(
-      (r) => r.id === requestId
-    );
-
-    if (requestIndex === -1) {
-      socket.emit('MINIGAME_APPROVAL_ERROR', {
-        message: '미니게임 요청을 찾을 수 없습니다.',
-      });
-      return;
-    }
-
-    const request = pendingMiniGames[requestIndex];
-    const dataMap = request.isPractice
-      ? practicePlayersData
-      : playersData;
-    const playerData = dataMap.get(request.socketId);
-
-    if (!playerData) {
-      socket.emit('MINIGAME_APPROVAL_ERROR', {
-        message: '플레이어 데이터를 찾을 수 없습니다.',
-      });
-      pendingMiniGames.splice(requestIndex, 1);
-      adminSockets.forEach((adminSocket) => {
-        adminSocket.emit(
-          'PENDING_MINIGAMES_UPDATE',
-          pendingMiniGames
-        );
-      });
-      return;
-    }
-
-    const reward = request.reward;
-
-    // 보상 지급 (cash에 추가)
-    playerData.cash += reward;
-
-    // 데이터베이스에 저장
-    if (playerData.dbId) {
-      const totalAsset = calculatePlayerTotalAsset(
-        request.socketId,
-        request.isPractice
-      );
-      dbHelpers.updatePlayerCashById(
-        playerData.dbId,
-        playerData.cash,
-        totalAsset,
-        request.isPractice
-      );
-      const adminId = adminAuthMap.get(socket.id) || null;
-      dbHelpers.saveTransaction(
-        playerData.dbId,
-        playerData.nickname,
-        'MINIGAME_REWARD',
-        null,
-        null,
-        null,
-        null,
-        null,
-        reward,
-        null,
-        null,
-        gameState.currentRound,
-        adminId,
-        request.isPractice
-      );
-    }
-
-    // 거래 로그 생성
-    const adminId = adminAuthMap.get(socket.id) || null;
-    const transaction = {
-      type: 'MINIGAME_REWARD',
-      reward: reward,
-      round: gameState.currentRound,
-      timestamp: new Date().toISOString(),
-      nickname: playerData.nickname,
-      adminId: adminId,
-    };
-    transactionLogs.push(transaction);
-
-    // 모든 관리자에게 거래 로그 전송
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'TRANSACTION_LOG_UPDATE',
-        transaction
-      );
-    });
-
-    // 플레이어에게 업데이트 전송
-    const playerSocket = io.sockets.sockets.get(
-      request.socketId
-    );
-    if (playerSocket) {
-      const totalAsset = calculatePlayerTotalAsset(
-        request.socketId,
-        request.isPractice
-      );
-      playerData.totalAsset = totalAsset;
-      playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-        cash: playerData.cash,
-        stocks: playerData.stocks,
-        bonusPoints: 0,
-        totalAsset: totalAsset,
-      });
-      // 미니게임 승인 알림
-      playerSocket.emit('MINIGAME_APPROVED', {
-        requestId,
-        reward,
-        message: `미니게임 보상 ₩${reward.toLocaleString(
-          'ko-KR'
-        )}이 지급되었습니다.`,
-      });
-    }
-
-    // 요청 목록에서 제거
-    pendingMiniGames.splice(requestIndex, 1);
-
-    // 모든 관리자에게 업데이트된 미니게임 목록 전송
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'PENDING_MINIGAMES_UPDATE',
-        pendingMiniGames
-      );
-    });
-
-    // 관리자에게 플레이어 리스트 업데이트
-    broadcastPlayerList();
-    const mode = request.isPractice ? '[연습]' : '[실제]';
-    console.log(
-      `${mode} ${playerData.nickname} 미니게임 보상 지급: ${reward}원`
-    );
-  });
-
-  // 관리자: 미니게임 거부
-  socket.on('ADMIN_REJECT_MINIGAME', (data) => {
-    if (!adminSockets.has(socket)) return;
-
-    const { requestId } = data;
-    const requestIndex = pendingMiniGames.findIndex(
-      (r) => r.id === requestId
-    );
-
-    if (requestIndex === -1) {
-      socket.emit('MINIGAME_REJECTION_ERROR', {
-        message: '미니게임 요청을 찾을 수 없습니다.',
-      });
-      return;
-    }
-
-    const request = pendingMiniGames[requestIndex];
-
-    // 플레이어에게 거부 알림
-    const playerSocket = io.sockets.sockets.get(
-      request.socketId
-    );
-    if (playerSocket) {
-      playerSocket.emit('MINIGAME_REJECTED', {
-        requestId,
-        message: '미니게임 보상 요청이 거부되었습니다.',
-      });
-    }
-
-    // 요청 목록에서 제거
-    pendingMiniGames.splice(requestIndex, 1);
-
-    // 모든 관리자에게 업데이트된 미니게임 목록 전송
-    adminSockets.forEach((adminSocket) => {
-      adminSocket.emit(
-        'PENDING_MINIGAMES_UPDATE',
-        pendingMiniGames
-      );
-    });
-
-    console.log(
-      `미니게임 거부: ${request.nickname} ${request.score}점 (보상: ${request.reward}원)`
-    );
-  });
-
   socket.on('ADMIN_GRANT_HINT', (data) => {
     if (!adminSockets.has(socket)) return;
 
@@ -2716,8 +2095,15 @@ io.on('connection', (socket) => {
 
   // 관리자: 플레이어 리스트 요청
   socket.on('ADMIN_REQUEST_PLAYER_LIST', () => {
+    console.log(
+      `[ADMIN_REQUEST_PLAYER_LIST] 요청 수신 - socket.id: ${socket.id}, 인증됨: ${adminSockets.has(socket)}`
+    );
     if (adminSockets.has(socket)) {
       broadcastPlayerList();
+    } else {
+      console.log(
+        `[ADMIN_REQUEST_PLAYER_LIST] 관리자 인증되지 않음 - socket.id: ${socket.id}`
+      );
     }
   });
 

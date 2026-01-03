@@ -237,7 +237,9 @@ export default function StockExchangePage({
                   className="input-modern w-full"
                 >
                   <option value="">
-                    플레이어를 선택하세요
+                    {playerList.length === 0
+                      ? '접속한 플레이어가 없습니다'
+                      : '플레이어를 선택하세요'}
                   </option>
                   {playerList.map((player) => (
                     <option
@@ -254,6 +256,11 @@ export default function StockExchangePage({
                     </option>
                   ))}
                 </select>
+                {playerList.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    플레이어가 접속하면 여기에 표시됩니다.
+                  </p>
+                )}
                 {selectedPlayer && (
                   <div className="mt-2 text-xs text-gray-600">
                     <div>
