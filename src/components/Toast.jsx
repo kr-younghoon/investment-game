@@ -1,5 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Info, AlertCircle, X } from 'lucide-react';
+import {
+  CheckCircle,
+  Info,
+  AlertCircle,
+  X,
+} from 'lucide-react';
 
 const toastTypes = {
   success: {
@@ -29,35 +34,55 @@ export default function Toast({ toasts, onRemove }) {
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 sm:gap-3 max-w-[calc(100%-2rem)] sm:max-w-md w-full pointer-events-none">
       <AnimatePresence>
         {toasts.map((toast, index) => {
-          const type = toastTypes[toast.type] || toastTypes.info;
+          const type =
+            toastTypes[toast.type] || toastTypes.info;
           const Icon = type.icon;
 
           return (
             <motion.div
               key={toast.id}
-              initial={{ 
-                opacity: 0, 
-                y: -100, 
+              initial={{
+                opacity: 0,
+                y: -100,
                 scale: 0.8,
-                filter: 'blur(10px)'
+                filter: 'blur(10px)',
               }}
-              animate={{ 
-                opacity: 1, 
-                y: 0, 
+              animate={{
+                opacity: 1,
+                y: 0,
                 scale: 1,
-                filter: 'blur(0px)'
+                filter: 'blur(0px)',
               }}
-              exit={{ 
-                opacity: 0, 
-                y: -50, 
+              exit={{
+                opacity: 0,
+                y: -50,
                 scale: 0.9,
-                filter: 'blur(5px)'
+                filter: 'blur(5px)',
               }}
-              transition={{ 
-                type: 'spring', 
-                damping: 20, 
-                stiffness: 300,
-                mass: 0.8
+              transition={{
+                opacity: {
+                  type: 'spring',
+                  damping: 20,
+                  stiffness: 300,
+                  mass: 0.8,
+                },
+                y: {
+                  type: 'spring',
+                  damping: 20,
+                  stiffness: 300,
+                  mass: 0.8,
+                },
+                scale: {
+                  type: 'spring',
+                  damping: 20,
+                  stiffness: 300,
+                  mass: 0.8,
+                },
+                filter: {
+                  type: 'tween',
+                  duration: 0.3,
+                  ease: 'easeOut',
+                },
               }}
               style={{
                 y: index * 10, // 여러 토스트가 있을 때 약간의 오프셋
@@ -66,7 +91,7 @@ export default function Toast({ toasts, onRemove }) {
             >
               {/* 리퀴드 글래스 배경 효과 */}
               <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-white/20 to-white/10"></div>
-              
+
               {/* 반짝이는 효과 */}
               <motion.div
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
@@ -79,18 +104,26 @@ export default function Toast({ toasts, onRemove }) {
                   ease: 'linear',
                 }}
               />
-              
+
               {/* 좌측 액센트 라인 */}
-              <div className={`absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b ${type.accentColor} opacity-60`}></div>
-              
+              <div
+                className={`absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b ${type.accentColor} opacity-60`}
+              ></div>
+
               <div className="relative flex items-start gap-3 sm:gap-4">
                 <motion.div
                   initial={{ scale: 0, rotate: -180 }}
                   animate={{ scale: 1, rotate: 0 }}
-                  transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
+                  transition={{
+                    delay: 0.1,
+                    type: 'spring',
+                    stiffness: 200,
+                  }}
                   className="flex-shrink-0"
                 >
-                  <Icon className={`w-6 h-6 sm:w-7 sm:h-7 ${type.iconColor}`} />
+                  <Icon
+                    className={`w-6 h-6 sm:w-7 sm:h-7 ${type.iconColor}`}
+                  />
                 </motion.div>
                 <div className="flex-1 min-w-0">
                   {toast.title && (
@@ -128,7 +161,10 @@ export default function Toast({ toasts, onRemove }) {
                 <motion.div
                   initial={{ width: '100%' }}
                   animate={{ width: '0%' }}
-                  transition={{ duration: toast.duration / 1000, ease: 'linear' }}
+                  transition={{
+                    duration: toast.duration / 1000,
+                    ease: 'linear',
+                  }}
                   className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r ${type.accentColor} opacity-60 rounded-b-xl sm:rounded-b-2xl`}
                 />
               )}
@@ -139,4 +175,3 @@ export default function Toast({ toasts, onRemove }) {
     </div>
   );
 }
-

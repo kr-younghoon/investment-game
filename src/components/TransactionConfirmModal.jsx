@@ -74,7 +74,7 @@ export default function TransactionConfirmModal({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">단가</span>
-                <span className="font-semibold text-gray-900">₩{price.toFixed(2)}</span>
+                <span className="font-semibold text-gray-900">₩{price % 1 === 0 ? price.toLocaleString('ko-KR') : price.toFixed(2).replace(/\.0+$/, '')}</span>
               </div>
               <div className="border-t border-gray-200 pt-3 mt-3">
                 <div className="flex justify-between items-center">

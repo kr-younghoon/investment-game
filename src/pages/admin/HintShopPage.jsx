@@ -1,37 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lightbulb,
   Check,
   TrendingUp,
   Gift,
+  Clock,
+  Users,
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
+import { initialScenarios } from '../../data/initialScenarios';
 
 export default function HintShopPage({
   gameState,
   playerList,
   transactionLogs,
   adminActions,
-  setAdminErrorCallback,
+  playerCount,
 }) {
   const { toasts, removeToast, success, error } =
     useToast();
-
-  // 관리자 에러 콜백 설정
-  useEffect(() => {
-    if (setAdminErrorCallback) {
-      setAdminErrorCallback((errorMessage) => {
-        error('오류', errorMessage, 3000);
-      });
-    }
-  }, [setAdminErrorCallback, error]);
   const [activeTab, setActiveTab] = useState('grant'); // 'grant' or 'logs'
   const [selectedPlayerId, setSelectedPlayerId] =
     useState('');
   const [hintDifficulty, setHintDifficulty] =
-    useState('하');
+    useState('이영훈 힌트');
   const [hintPrice, setHintPrice] = useState('1000');
   const [hintContent, setHintContent] = useState('');
 
@@ -40,27 +34,82 @@ export default function HintShopPage({
     (log) => log.type === 'HINT_PURCHASE'
   );
 
+  // 최대 라운드 계산
+  const maxRounds = gameState.isPracticeMode
+    ? 4
+    : initialScenarios.length + 1;
+
   return (
     <div className="min-h-screen p-2 sm:p-4 pb-20 sm:pb-24 relative">
       {/* 배경 효과 */}
-      <div className="fixed inset-0 bg-white -z-10"></div>
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 -z-10"></div>
 
-      {/* 헤더 */}
-      <div className="text-center mb-6 sm:mb-8">
-        <motion.h1
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xl sm:text-2xl md:text-3xl font-black mb-3 text-gray-900"
-        >
-          💡 힌트 상점
-        </motion.h1>
-        <div className="text-sm sm:text-base text-gray-600">
-          라운드 {gameState.currentRound + 1}
+      {/* 게임 상태 정보 */}
+      <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 flex gap-2 sm:gap-3 flex-wrap">
+        {!gameState.isGameStarted ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="px-2 py-1 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl font-semibold bg-gray-100 text-gray-700 border border-gray-300 text-xs sm:text-sm"
+          >
+            ⏸️ 게임 시작 전
+          </motion.div>
+        ) : null}
+        <div className="px-2 py-1 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl font-semibold bg-blue-100 text-blue-700 border border-blue-300 text-xs sm:text-sm">
+          <Users className="w-3 h-3 sm:w-4 sm:h-4 inline-block mr-1" />
+          {playerCount || 0}명 접속
         </div>
       </div>
 
+      {/* 헤더 */}
+      <div className="text-center mb-4 sm:mb-6">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-xl sm:text-2xl md:text-3xl font-black mb-2 gradient-text"
+        >
+          💡 힌트 상점
+        </motion.h1>
+        {gameState.isGameStarted && (
+          <>
+            <div className="text-sm sm:text-base text-gray-600 mb-2">
+              라운드 {gameState.currentRound + 1} /{' '}
+              {maxRounds}
+              {gameState.isPracticeMode && (
+                <span className="ml-2 text-yellow-600">
+                  (연습 모드)
+                </span>
+              )}
+            </div>
+            {/* 라운드 타이머 */}
+            {!gameState.isWaitingMode &&
+              gameState.roundTimer !== null && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold text-base sm:text-lg ${
+                    gameState.roundTimer <= 60
+                      ? 'bg-red-100 text-red-700 border-2 border-red-300'
+                      : gameState.roundTimer <= 300
+                      ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-300'
+                      : 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span>
+                    {Math.floor(gameState.roundTimer / 60)}:
+                    {(gameState.roundTimer % 60)
+                      .toString()
+                      .padStart(2, '0')}
+                  </span>
+                </motion.div>
+              )}
+          </>
+        )}
+      </div>
+
       {/* 탭 메뉴 */}
-      <div className="flex gap-2 mb-6 sm:mb-8 border-b border-gray-200">
+      <div className="flex gap-2 mb-4 sm:mb-6 border-b border-gray-200">
         <button
           onClick={() => setActiveTab('grant')}
           className={`px-4 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all border-b-2 ${
@@ -95,9 +144,9 @@ export default function HintShopPage({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
-            className="card-modern p-3 sm:p-4 mb-6 sm:mb-8"
+            className="card-modern p-3 sm:p-4 mb-4 sm:mb-6"
           >
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6 flex items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold gradient-text mb-3 sm:mb-4 flex items-center gap-2">
               <Lightbulb className="w-5 h-5 sm:w-6 sm:h-6" />
               힌트 부여
             </h2>
@@ -129,29 +178,33 @@ export default function HintShopPage({
                 </select>
               </div>
 
-              {/* 난이도 선택 */}
+              {/* 힌트 꾸러미 선택 */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  힌트 난이도
+                  힌트 꾸러미
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {['하', '중', '상'].map((difficulty) => (
+                  {[
+                    '이영훈 힌트',
+                    '김민철 힌트',
+                    '조은별 힌트',
+                  ].map((hintPack) => (
                     <button
-                      key={difficulty}
+                      key={hintPack}
                       onClick={() =>
-                        setHintDifficulty(difficulty)
+                        setHintDifficulty(hintPack)
                       }
-                      className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                        hintDifficulty === difficulty
-                          ? difficulty === '상'
-                            ? 'bg-red-500 text-white shadow-md'
-                            : difficulty === '중'
-                            ? 'bg-yellow-500 text-white shadow-md'
-                            : 'bg-green-500 text-white shadow-md'
+                      className={`px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
+                        hintDifficulty === hintPack
+                          ? hintPack === '이영훈 힌트'
+                            ? 'bg-blue-500 text-white shadow-md'
+                            : hintPack === '김민철 힌트'
+                            ? 'bg-purple-500 text-white shadow-md'
+                            : 'bg-pink-500 text-white shadow-md'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      {difficulty}급
+                      {hintPack}
                     </button>
                   ))}
                 </div>
@@ -190,27 +243,9 @@ export default function HintShopPage({
                 />
               </div>
 
-              {/* 게임 시작 안내 */}
-              {!gameState.isGameStarted && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-yellow-800">
-                    ⚠️ 게임이 시작되지 않았습니다. 게임을
-                    시작한 후 힌트를 부여할 수 있습니다.
-                  </p>
-                </div>
-              )}
-
               {/* 힌트 부여 버튼 */}
               <button
                 onClick={() => {
-                  if (!gameState.isGameStarted) {
-                    error(
-                      '오류',
-                      '게임이 시작되지 않았습니다. 게임을 시작한 후 힌트를 부여할 수 있습니다.',
-                      3000
-                    );
-                    return;
-                  }
                   if (!selectedPlayerId) {
                     error(
                       '오류',
@@ -243,22 +278,18 @@ export default function HintShopPage({
                       `${
                         selectedPlayer?.nickname ||
                         '플레이어'
-                      }에게 ${hintDifficulty}급 힌트를 부여했습니다. (₩${price.toLocaleString(
+                      }에게 ${hintDifficulty}를 부여했습니다. (₩${price.toLocaleString(
                         'ko-KR'
                       )})`,
                       3000
                     );
                     setSelectedPlayerId('');
-                    setHintDifficulty('하');
+                    setHintDifficulty('이영훈 힌트');
                     setHintPrice('1000');
                     setHintContent('');
                   }
                 }}
-                disabled={
-                  !gameState.isGameStarted ||
-                  !selectedPlayerId ||
-                  !hintPrice
-                }
+                disabled={!selectedPlayerId || !hintPrice}
                 className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold rounded-lg text-sm transition-all flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
@@ -276,9 +307,9 @@ export default function HintShopPage({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
-            className="card-modern p-3 sm:p-4 mb-6 sm:mb-8"
+            className="card-modern p-3 sm:p-4 mb-4 sm:mb-6"
           >
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl font-bold gradient-text mb-3 sm:mb-4">
               힌트 로그 ({hintLogs.length}건)
             </h2>
             <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
@@ -344,16 +375,20 @@ export default function HintShopPage({
                             <td className="py-2 px-2 sm:px-4 text-center">
                               <div
                                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold ${
-                                  log.difficulty === '상'
-                                    ? 'bg-red-100 text-red-700'
+                                  log.difficulty ===
+                                  '이영훈 힌트'
+                                    ? 'bg-blue-100 text-blue-700'
                                     : log.difficulty ===
-                                      '중'
-                                    ? 'bg-yellow-100 text-yellow-700'
-                                    : 'bg-green-100 text-green-700'
+                                      '김민철 힌트'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : log.difficulty ===
+                                      '조은별 힌트'
+                                    ? 'bg-pink-100 text-pink-700'
+                                    : 'bg-gray-100 text-gray-700'
                                 }`}
                               >
                                 <Lightbulb className="w-3 h-3" />
-                                {log.difficulty}급
+                                {log.difficulty}
                               </div>
                             </td>
                             <td className="py-2 px-2 sm:px-4 text-right text-xs sm:text-sm font-bold text-blue-600">

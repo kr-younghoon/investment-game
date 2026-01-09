@@ -7,7 +7,7 @@ export default function GameSettings({
   isOpen,
   onClose,
   onSave,
-  initialCash = 10000,
+  initialCash = 3000000,
   scenarios = [],
 }) {
   const [settings, setSettings] = useState({

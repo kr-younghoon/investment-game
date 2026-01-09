@@ -37,6 +37,10 @@ function App() {
           element={<AdminPage />}
         />
         <Route
+          path="/admin/scenario"
+          element={<AdminPage />}
+        />
+        <Route
           path="/display"
           element={<DisplayBoardPage />}
         />

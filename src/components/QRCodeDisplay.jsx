@@ -17,3 +17,7 @@ export default function QRCodeDisplay({ value, size = 200 }) {
 
 
 
+
+
+
+

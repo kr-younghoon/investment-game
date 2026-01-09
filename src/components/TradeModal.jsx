@@ -50,11 +50,17 @@ export default function TradeModal({
     setTradeQuantity(value);
   };
 
-  const handleMax = () => {
+  const handleMax = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (tradeType === 'buy') {
-      setTradeQuantity(maxBuyable.toString());
+      if (maxBuyable > 0) {
+        setTradeQuantity(maxBuyable.toString());
+      }
     } else {
-      setTradeQuantity(quantity.toString());
+      if (quantity > 0) {
+        setTradeQuantity(quantity.toString());
+      }
     }
     setError('');
   };
@@ -129,7 +135,7 @@ export default function TradeModal({
 
             <div className="mb-6">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">{stock.name}</h2>
-              <div className="text-sm text-gray-600">현재가: ₩{price.toFixed(2)}</div>
+              <div className="text-sm text-gray-600">현재가: ₩{price % 1 === 0 ? price.toLocaleString('ko-KR') : price.toFixed(2).replace(/\.0+$/, '')}</div>
               {quantity > 0 && (
                 <div className="text-sm text-gray-600">보유: {quantity}주</div>
               )}
@@ -191,6 +197,7 @@ export default function TradeModal({
                   disabled={tradeType === 'sell' && quantity === 0}
                 />
                 <button
+                  type="button"
                   onClick={handleMax}
                   disabled={tradeType === 'buy' ? maxBuyable === 0 : quantity === 0}
                   className={`px-4 py-3 font-semibold rounded-lg transition-all ${
