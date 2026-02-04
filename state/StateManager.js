@@ -272,8 +272,10 @@ class StateManager {
     this.gameState.isTradingBlocked = false;
     this.gameState.isLastRound = false;
     this.gameState.scenarios = isPractice ? practiceScenarios : initialScenarios;
+    this.gameState.customStocks = null;
 
-    // 초기 가격 재설정
+    // 주가 완전 초기화 (이전 게임의 주식 ID 잔존 방지)
+    this.gameState.stockPrices = {};
     this._initializeStockPrices();
   }
 
@@ -309,6 +311,8 @@ class StateManager {
       allowPlayerTrading: this.gameState.allowPlayerTrading,
       isTradingBlocked: this.gameState.isTradingBlocked,
       isLastRound: this.gameState.isLastRound,
+      customStocks: this.gameState.customStocks || null,
+      scenarios: this.gameState.scenarios || null,
     };
   }
 
@@ -361,15 +365,24 @@ class StateManager {
       this.gameState.isLastRound = Boolean(state.isLastRound);
     }
 
-    // 시나리오 설정
-    this.gameState.scenarios = this.gameState.isPracticeMode
-      ? practiceScenarios
-      : initialScenarios;
+    // 커스텀 주식 복원
+    if (Array.isArray(state.customStocks) && state.customStocks.length > 0) {
+      this.gameState.customStocks = state.customStocks;
+    } else {
+      this.gameState.customStocks = null;
+    }
+
+    // 시나리오 설정 (저장된 커스텀 시나리오 우선, 없으면 기본값)
+    if (Array.isArray(state.scenarios) && state.scenarios.length > 0) {
+      this.gameState.scenarios = state.scenarios;
+    } else {
+      this.gameState.scenarios = this.gameState.isPracticeMode
+        ? practiceScenarios
+        : initialScenarios;
+    }
 
     // totalRounds 업데이트
-    this.gameSettings.totalRounds = this.gameState.isPracticeMode
-      ? this.gameState.scenarios.length + 1
-      : this.gameState.scenarios.length;
+    this.gameSettings.totalRounds = this.gameState.scenarios.length + 1;
 
     // 재시작 시 자동 재개 설정
     if (!resumeOnRestart) {
@@ -389,6 +402,9 @@ class StateManager {
 
     this._normalizeStockPriceHistory(STOCKS);
     this._normalizeStockPriceHistory(PRACTICE_STOCKS);
+    if (this.gameState.customStocks) {
+      this._normalizeStockPriceHistory(this.gameState.customStocks);
+    }
     return true;
   }
 

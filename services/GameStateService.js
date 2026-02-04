@@ -1,4 +1,5 @@
 import { STOCKS, PRACTICE_STOCKS } from '../src/data/initialScenarios.js';
+import { createGameId } from '../db.js';
 
 /**
  * GameStateService - 게임 상태 관리 및 가격 계산
@@ -16,6 +17,18 @@ export class GameStateService {
   }
 
   /**
+   * 현재 게임에서 사용 중인 주식 목록 반환
+   * customStocks가 있으면 커스텀 주식, 없으면 기본 주식 사용
+   */
+  getActiveStocks() {
+    const gameState = this.state.getGameState();
+    if (gameState.customStocks && gameState.customStocks.length > 0) {
+      return gameState.customStocks;
+    }
+    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+  }
+
+  /**
    * UI 표기 기준 라운드 번호 반환
    */
   getDisplayRoundNumber() {
@@ -28,9 +41,8 @@ export class GameStateService {
   calculateNextRoundPrices() {
     const gameState = this.state.getGameState();
     const scenarios = gameState.scenarios;
-    const maxRounds = gameState.isPracticeMode
-      ? scenarios.length + 1
-      : scenarios.length + 1;
+    // 라운드 1은 초기 상태, 라운드 2부터 시나리오 적용 (총 라운드 = 시나리오 수 + 1)
+    const maxRounds = scenarios.length + 1;
 
     const nextRound = gameState.currentRound + 1;
     const isLastRound = nextRound >= maxRounds;
@@ -54,6 +66,8 @@ export class GameStateService {
 
     this.state.updateGameState({ isLastRound: false });
 
+    const stockList = this.getActiveStocks();
+
     let scenarioIndex;
     if (gameState.isPracticeMode) {
       if (nextRound === 1) {
@@ -67,7 +81,7 @@ export class GameStateService {
       scenarioIndex = nextRound - 2;
     } else {
       if (nextRound === 1) {
-        STOCKS.forEach((stock) => {
+        stockList.forEach((stock) => {
           const currentPrice =
             gameState.stockPrices[stock.id]?.[gameState.currentRound] || stock.basePrice;
           if (!gameState.stockPrices[stock.id]) {
@@ -103,11 +117,10 @@ export class GameStateService {
     }
 
     // 가격 계산
-    const stockList = gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
     stockList.forEach((stock) => {
       const currentPrice =
         gameState.stockPrices[stock.id]?.[gameState.currentRound] || stock.basePrice;
-      const changeRate = scenario.volatility[stock.id] / 100;
+      const changeRate = (scenario.volatility[stock.id] || 0) / 100;
       const newPrice = currentPrice * (1 + changeRate);
 
       if (!gameState.stockPrices[stock.id]) {
@@ -141,7 +154,7 @@ export class GameStateService {
     const gameState = this.state.getGameState();
     const dataMap = this.state.getPlayersData(gameState.isPracticeMode);
     const currentPrices = this.broadcast.getCurrentPrices();
-    const stocksToSell = gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+    const stocksToSell = this.getActiveStocks();
 
     // 모든 주식 자동 매도
     dataMap.forEach((playerData, socketId) => {
@@ -333,6 +346,179 @@ export class GameStateService {
       return true;
     }
     return false;
+  }
+
+  /**
+   * 커스텀 시나리오로 게임 시작
+   * @param {Array} customStocks - 커스텀 주식 배열 [{id, name, basePrice}, ...]
+   * @param {Array} customRounds - 커스텀 라운드 배열 [{month, headline, newsBriefing, volatility, hints}, ...]
+   * @param {boolean} isPractice - 연습 게임 여부
+   * @param {boolean} shouldDelete - 기존 데이터 삭제 여부
+   */
+  startGameWithScenario(customStocks, customRounds, isPractice = false, shouldDelete = false) {
+    console.log(`[startGameWithScenario] 커스텀 시나리오로 게임 시작 - isPractice: ${isPractice}, stocks: ${customStocks.length}, rounds: ${customRounds.length}, shouldDelete: ${shouldDelete}`);
+
+    // 새 게임 ID 생성
+    const newGameId = createGameId();
+    this.db.createGame(newGameId, isPractice);
+
+    // 이전 데이터 삭제 옵션
+    if (shouldDelete) {
+      // PlayerService가 services에 없으므로 dbHelpers를 직접 사용
+      this.db.deleteAllPlayers(null, isPractice);
+      this.db.clearAllTransactions(null, isPractice);
+
+      // 메모리에서도 삭제
+      const dataMap = isPractice ? this.state.practicePlayersData : this.state.playersData;
+      dataMap.clear();
+
+      console.log(`[startGameWithScenario] 이전 데이터 삭제 완료 (isPractice: ${isPractice})`);
+    }
+
+    // 게임 상태 초기화
+    this.state.resetForNewGame(isPractice);
+
+    // 커스텀 시나리오로 게임 상태 업데이트
+    this.state.updateGameState({
+      gameId: newGameId,
+      isPracticeMode: isPractice,
+      isGameStarted: true,
+      isWaitingMode: false,
+      scenarios: customRounds,
+      customStocks: customStocks,
+    });
+
+    // 게임 설정 업데이트 (라운드 수 = 시나리오 수 + 1)
+    this.state.setGameSettings({
+      totalRounds: customRounds.length + 1,
+    });
+
+    // 주식 가격 초기화 (커스텀 주식 사용)
+    const stockPrices = {};
+    customStocks.forEach((stock) => {
+      stockPrices[stock.id] = [stock.basePrice];
+    });
+    this.state.updateGameState({ stockPrices });
+
+    // 기존 플레이어 데이터 처리
+    const INITIAL_CASH = this.state.INITIAL_CASH;
+    const connectedPlayers = this.state.getConnectedPlayers();
+
+    if (isPractice) {
+      // 연습 모드: 실제 플레이어 데이터에서 마이그레이션
+      const realPlayersData = this.state.playersData;
+      realPlayersData.forEach((playerData, socketId) => {
+        if (connectedPlayers.has(socketId)) {
+          const newPlayerData = {
+            nickname: playerData.nickname,
+            cash: INITIAL_CASH,
+            stocks: {},
+            bonusPoints: 0,
+            totalAsset: INITIAL_CASH,
+            transactions: [],
+            hints: [],
+            dbId: null,
+          };
+
+          customStocks.forEach((stock) => {
+            newPlayerData.stocks[stock.id] = 0;
+          });
+
+          // DB 저장
+          try {
+            const savedPlayer = this.db.savePlayer(
+              newGameId,
+              socketId,
+              newPlayerData.nickname,
+              INITIAL_CASH,
+              0,
+              INITIAL_CASH,
+              true
+            );
+            newPlayerData.dbId = savedPlayer?.id || null;
+          } catch (error) {
+            console.error(`[startGameWithScenario] 플레이어 저장 오류: ${error.message}`);
+            newPlayerData.dbId = null;
+          }
+
+          this.state.practicePlayersData.set(socketId, newPlayerData);
+
+          // 플레이어에게 포트폴리오 전송
+          if (this.io) {
+            const playerSocket = this.io.sockets.sockets.get(socketId);
+            if (playerSocket) {
+              playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
+                cash: INITIAL_CASH,
+                stocks: newPlayerData.stocks,
+                bonusPoints: 0,
+                totalAsset: INITIAL_CASH,
+              });
+            }
+          }
+        }
+      });
+    } else {
+      // 실제 게임 모드: 기존 플레이어 데이터 초기화
+      const playersData = this.state.playersData;
+      connectedPlayers.forEach((socketId) => {
+        const playerData = playersData.get(socketId);
+        if (playerData) {
+          playerData.cash = INITIAL_CASH;
+          playerData.bonusPoints = 0;
+          playerData.totalAsset = INITIAL_CASH;
+          playerData.transactions = [];
+          playerData.hints = [];
+
+          // 이전 주식 데이터 완전 초기화 후 새 주식으로 교체
+          playerData.stocks = {};
+          customStocks.forEach((stock) => {
+            playerData.stocks[stock.id] = 0;
+          });
+
+          // DB 저장
+          try {
+            const savedPlayer = this.db.savePlayer(
+              newGameId,
+              socketId,
+              playerData.nickname,
+              INITIAL_CASH,
+              0,
+              INITIAL_CASH,
+              false
+            );
+            playerData.dbId = savedPlayer?.id || null;
+          } catch (error) {
+            console.error(`[startGameWithScenario] 플레이어 저장 오류: ${error.message}`);
+          }
+
+          // 플레이어에게 포트폴리오 전송
+          if (this.io) {
+            const playerSocket = this.io.sockets.sockets.get(socketId);
+            if (playerSocket) {
+              playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
+                cash: INITIAL_CASH,
+                stocks: playerData.stocks,
+                bonusPoints: 0,
+                totalAsset: INITIAL_CASH,
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // 브로드캐스트
+    this.broadcast.broadcastGameState();
+    this.broadcast.broadcastPlayerList();
+    this.broadcast.persistGameState({ force: true });
+
+    if (this.io) {
+      this.io.emit('GAME_RESTART', { isPracticeMode: isPractice });
+    }
+
+    console.log(`[startGameWithScenario] 커스텀 시나리오 게임 시작 완료 (gameId: ${newGameId})`);
+
+    return newGameId;
   }
 }
 

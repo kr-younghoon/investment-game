@@ -10,6 +10,20 @@ export class PlayerService {
   }
 
   /**
+   * 현재 게임에서 사용 중인 주식 목록 반환
+   */
+  getActiveStocks(isPractice) {
+    const gameState = this.state.getGameState();
+    if (gameState.customStocks && gameState.customStocks.length > 0) {
+      return gameState.customStocks;
+    }
+    if (isPractice !== undefined) {
+      return isPractice ? PRACTICE_STOCKS : STOCKS;
+    }
+    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+  }
+
+  /**
    * 닉네임 중복 확인
    */
   isNicknameDuplicate(nickname, excludeSocketId = null) {
@@ -61,8 +75,7 @@ export class PlayerService {
       };
 
       // 주식 초기화
-      const stockList = isPractice ? PRACTICE_STOCKS : STOCKS;
-      stockList.forEach((stock) => {
+      this.getActiveStocks(isPractice).forEach((stock) => {
         playerData.stocks[stock.id] = 0;
       });
 
@@ -96,9 +109,7 @@ export class PlayerService {
     // 주식 정보 가져오기
     const dbStocks = this.db.getPlayerStocks(currentGameId, dbPlayer.id, isPractice);
     const stocks = {};
-    const stockList = isPractice ? PRACTICE_STOCKS : STOCKS;
-
-    stockList.forEach((stock) => {
+    this.getActiveStocks(isPractice).forEach((stock) => {
       const dbStock = dbStocks.find((s) => s.stock_id === stock.id);
       stocks[stock.id] = dbStock ? dbStock.quantity : 0;
     });
@@ -160,12 +171,13 @@ export class PlayerService {
 
     this.db.updatePlayerCashById(playerData.dbId, INITIAL_CASH, INITIAL_CASH, isPractice);
 
-    // 주식 초기화
-    STOCKS.forEach((stock) => {
-      this.db.savePlayerStock(currentGameId, playerData.dbId, stock.id, 0, isPractice);
-    });
-    PRACTICE_STOCKS.forEach((stock) => {
-      this.db.savePlayerStock(currentGameId, playerData.dbId, stock.id, 0, isPractice);
+    // 주식 초기화 (커스텀 주식 + 기본 주식 모두 초기화)
+    const allStockIds = new Set();
+    this.getActiveStocks(isPractice).forEach((stock) => allStockIds.add(stock.id));
+    STOCKS.forEach((stock) => allStockIds.add(stock.id));
+    PRACTICE_STOCKS.forEach((stock) => allStockIds.add(stock.id));
+    allStockIds.forEach((stockId) => {
+      this.db.savePlayerStock(currentGameId, playerData.dbId, stockId, 0, isPractice);
     });
 
     // 힌트 초기화

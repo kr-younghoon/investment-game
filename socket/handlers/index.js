@@ -13,6 +13,7 @@ import { registerHintHandlers } from './hintHandler.js';
 import { registerRewardHandlers } from './rewardHandler.js';
 import { registerPlayerMgmtHandlers } from './playerMgmtHandler.js';
 import { registerTransactionMgmtHandlers } from './transactionMgmtHandler.js';
+import { registerScenarioHandlers } from './scenarioHandler.js';
 
 /**
  * 모든 소켓 핸들러를 등록합니다.
@@ -65,6 +66,9 @@ export function registerAllHandlers(socket, io, services) {
 
   // 거래 내역 관리 핸들러
   registerTransactionMgmtHandlers(socket, io, services);
+
+  // 시나리오 핸들러
+  registerScenarioHandlers(socket, io, services);
 }
 
 export {
@@ -83,6 +87,7 @@ export {
   registerRewardHandlers,
   registerPlayerMgmtHandlers,
   registerTransactionMgmtHandlers,
+  registerScenarioHandlers,
 };
 
 export default registerAllHandlers;

@@ -79,9 +79,15 @@ export class TradingService {
       return { success: false, error: '현금이 부족합니다.' };
     }
 
+    // 스냅샷 (롤백용)
+    const prevCash = playerData.cash;
+    const prevStockQty = playerData.stocks[stockId] || 0;
+    const prevTotalAsset = playerData.totalAsset;
+    const prevTransactionsLength = (playerData.transactions || []).length;
+
     // 거래 실행
     playerData.cash -= totalCost;
-    playerData.stocks[stockId] = (playerData.stocks[stockId] || 0) + quantity;
+    playerData.stocks[stockId] = prevStockQty + quantity;
 
     // 거래 기록
     const transaction = {
@@ -104,8 +110,18 @@ export class TradingService {
     const totalAsset = this.broadcast.calculatePlayerTotalAsset(socketId, isPractice);
     playerData.totalAsset = totalAsset;
 
-    // DB 저장
-    this._persistTransaction(playerData, stockId, transaction, isPractice);
+    // DB 저장 (실패 시 롤백)
+    try {
+      this._persistTransaction(playerData, stockId, transaction, isPractice);
+    } catch (err) {
+      // 롤백
+      playerData.cash = prevCash;
+      playerData.stocks[stockId] = prevStockQty;
+      playerData.totalAsset = prevTotalAsset;
+      playerData.transactions = playerData.transactions.slice(0, prevTransactionsLength);
+      console.error('[TradingService] 매수 DB 저장 실패, 롤백:', err);
+      return { success: false, error: 'DB 저장 실패. 거래가 취소되었습니다.' };
+    }
 
     // 평균 매수가 계산
     const averagePrice = this.calculateAverageBuyPrice(playerData, stockId);
@@ -157,6 +173,12 @@ export class TradingService {
 
     const totalRevenue = price * quantity;
 
+    // 스냅샷 (롤백용)
+    const prevCash = playerData.cash;
+    const prevStockQty = currentQty;
+    const prevTotalAsset = playerData.totalAsset;
+    const prevTransactionsLength = (playerData.transactions || []).length;
+
     // 거래 실행
     playerData.cash += totalRevenue;
     playerData.stocks[stockId] = currentQty - quantity;
@@ -183,8 +205,18 @@ export class TradingService {
     const totalAsset = this.broadcast.calculatePlayerTotalAsset(socketId, isPractice);
     playerData.totalAsset = totalAsset;
 
-    // DB 저장
-    this._persistTransaction(playerData, stockId, transaction, isPractice, totalRevenue);
+    // DB 저장 (실패 시 롤백)
+    try {
+      this._persistTransaction(playerData, stockId, transaction, isPractice, totalRevenue);
+    } catch (err) {
+      // 롤백
+      playerData.cash = prevCash;
+      playerData.stocks[stockId] = prevStockQty;
+      playerData.totalAsset = prevTotalAsset;
+      playerData.transactions = playerData.transactions.slice(0, prevTransactionsLength);
+      console.error('[TradingService] 매도 DB 저장 실패, 롤백:', err);
+      return { success: false, error: 'DB 저장 실패. 거래가 취소되었습니다.' };
+    }
 
     const stock = this._getStockById(stockId, isPractice);
 
@@ -376,6 +408,7 @@ export class TradingService {
       );
     } catch (error) {
       console.error('[TradingService] DB 저장 오류:', error);
+      throw error;
     }
   }
 
@@ -430,7 +463,10 @@ export class TradingService {
    * 종목 ID로 주식 정보 가져오기
    */
   _getStockById(stockId, isPractice) {
-    const stockList = isPractice ? PRACTICE_STOCKS : STOCKS;
+    const gameState = this.state.getGameState();
+    const stockList = (gameState.customStocks && gameState.customStocks.length > 0)
+      ? gameState.customStocks
+      : (isPractice ? PRACTICE_STOCKS : STOCKS);
     return stockList.find((s) => s.id === stockId);
   }
 }

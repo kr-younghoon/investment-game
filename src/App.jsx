@@ -5,7 +5,6 @@ import {
   Navigate,
 } from 'react-router-dom';
 import AdminPage from './pages/AdminPage';
-import AdminRoleSelection from './pages/admin/AdminRoleSelection';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import PlayerPage from './pages/PlayerPage';
 import DisplayBoardPage from './pages/DisplayBoardPage';
@@ -21,23 +20,6 @@ function App() {
         />
         <Route
           path="/admin"
-          element={<AdminRoleSelection />}
-        />
-        <Route path="/admin/hint" element={<AdminPage />} />
-        <Route
-          path="/admin/stock"
-          element={<AdminPage />}
-        />
-        <Route
-          path="/admin/developer"
-          element={<AdminPage />}
-        />
-        <Route
-          path="/admin/minigame"
-          element={<AdminPage />}
-        />
-        <Route
-          path="/admin/scenario"
           element={<AdminPage />}
         />
         <Route

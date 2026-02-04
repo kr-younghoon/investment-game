@@ -226,6 +226,19 @@ try {
   CREATE INDEX IF NOT EXISTS idx_round_rumors_game_round ON round_rumors(game_id, round);
   CREATE INDEX IF NOT EXISTS idx_round_hints_game_round ON round_hints(game_id, round);
   `);
+
+  // 시나리오 테이블 생성
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      data_json TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_scenarios_type ON scenarios(type);
+  `);
 } catch (error) {
   // 인덱스가 이미 존재하는 경우 무시
   if (!error.message.includes('already exists')) {
@@ -438,6 +451,25 @@ const stmts = {
   `),
   deleteRoundHints: db.prepare(
     'DELETE FROM round_hints WHERE game_id = ? AND round = ?'
+  ),
+
+  // Scenarios
+  getAllScenarios: db.prepare(
+    'SELECT id, name, type, created_at, updated_at FROM scenarios WHERE type = ? ORDER BY updated_at DESC'
+  ),
+  getScenarioById: db.prepare(
+    'SELECT * FROM scenarios WHERE id = ?'
+  ),
+  insertScenario: db.prepare(`
+    INSERT INTO scenarios (name, type, data_json)
+    VALUES (?, ?, ?)
+  `),
+  updateScenario: db.prepare(`
+    UPDATE scenarios SET name = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `),
+  deleteScenario: db.prepare(
+    'DELETE FROM scenarios WHERE id = ?'
   ),
 };
 
@@ -1135,6 +1167,65 @@ export const dbHelpers = {
         '[dbHelpers] 라운드 힌트 삭제 오류:',
         error
       );
+      throw error;
+    }
+  },
+
+  // Scenarios
+  getAllScenarios(type) {
+    const results = stmts.getAllScenarios.all(type);
+    return results.map((s) => ({
+      id: s.id,
+      name: s.name,
+      type: s.type,
+      createdAt: s.created_at,
+      updatedAt: s.updated_at,
+    }));
+  },
+
+  getScenarioById(id) {
+    const row = stmts.getScenarioById.get(id);
+    if (!row) return null;
+    try {
+      const data = JSON.parse(row.data_json);
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        stocks: data.stocks || [],
+        rounds: data.rounds || [],
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    } catch (error) {
+      console.error('[dbHelpers] 시나리오 파싱 오류:', error);
+      return null;
+    }
+  },
+
+  saveScenario(id, name, type, stocks, rounds) {
+    try {
+      const dataJson = JSON.stringify({ stocks, rounds });
+      if (id) {
+        // 업데이트
+        stmts.updateScenario.run(name, dataJson, id);
+        return id;
+      } else {
+        // 새로 생성
+        const result = stmts.insertScenario.run(name, type, dataJson);
+        return result.lastInsertRowid;
+      }
+    } catch (error) {
+      console.error('[dbHelpers] 시나리오 저장 오류:', error);
+      throw error;
+    }
+  },
+
+  deleteScenario(id) {
+    try {
+      stmts.deleteScenario.run(id);
+    } catch (error) {
+      console.error('[dbHelpers] 시나리오 삭제 오류:', error);
       throw error;
     }
   },

@@ -55,6 +55,9 @@ export function registerGameHandlers(socket, io, services) {
     });
     stateManager.updateGameState({ stockPrices });
 
+    // 이전 연습 데이터 초기화 (stale 데이터 방지)
+    stateManager.practicePlayersData.clear();
+
     // 기존 플레이어 데이터 마이그레이션 (실제 -> 연습)
     const realPlayersData = stateManager.playersData;
     const practicePlayersData = stateManager.practicePlayersData;
@@ -80,16 +83,21 @@ export function registerGameHandlers(socket, io, services) {
         });
 
         // DB 저장
-        const savedPlayer = dbHelpers.savePlayer(
-          newGameId,
-          socketId,
-          newPlayerData.nickname,
-          INITIAL_CASH,
-          0,
-          INITIAL_CASH,
-          true
-        );
-        newPlayerData.dbId = savedPlayer.id;
+        try {
+          const savedPlayer = dbHelpers.savePlayer(
+            newGameId,
+            socketId,
+            newPlayerData.nickname,
+            INITIAL_CASH,
+            0,
+            INITIAL_CASH,
+            true
+          );
+          newPlayerData.dbId = savedPlayer?.id || null;
+        } catch (error) {
+          console.error(`[ADMIN_START_PRACTICE] 플레이어 저장 오류: ${error.message}`);
+          newPlayerData.dbId = null;
+        }
 
         practicePlayersData.set(socketId, newPlayerData);
 
@@ -159,6 +167,9 @@ export function registerGameHandlers(socket, io, services) {
     });
     stateManager.updateGameState({ stockPrices });
 
+    // 연습 모드 데이터 정리 (모드 전환 시 stale 데이터 방지)
+    stateManager.practicePlayersData.clear();
+
     // 기존 플레이어 데이터 초기화
     const playersData = stateManager.playersData;
     const connectedPlayers = stateManager.getConnectedPlayers();
@@ -174,6 +185,8 @@ export function registerGameHandlers(socket, io, services) {
         playerData.transactions = [];
         playerData.hints = [];
 
+        // 이전 주식 데이터 완전 초기화 후 새 주식으로 교체
+        playerData.stocks = {};
         STOCKS.forEach((stock) => {
           playerData.stocks[stock.id] = 0;
         });

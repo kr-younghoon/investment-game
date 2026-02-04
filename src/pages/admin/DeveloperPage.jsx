@@ -36,6 +36,7 @@ import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
 import ConfirmModal from '../../components/ConfirmModal';
 import GameStartModal from '../../components/GameStartModal';
+import ScenarioSetupModal from '../../components/ScenarioSetupModal';
 import {
   STOCKS,
   initialScenarios,
@@ -83,6 +84,8 @@ export default function DeveloperPage({
   const [confirmModal, setConfirmModal] = useState(null); // { type: 'previous' | 'next' | 'end' | 'timer', onConfirm: function }
   const [gameStartModal, setGameStartModal] =
     useState(null); // { type: 'practice' | 'real', onConfirm: function }
+  const [scenarioSetupModal, setScenarioSetupModal] =
+    useState(null); // { type: 'practice' | 'real' }
   const [displayMessage, setDisplayMessage] = useState(''); // 전광판 메시지 입력
   const [isMessageActive, setIsMessageActive] =
     useState(false); // 메시지 활성 상태
@@ -386,79 +389,7 @@ export default function DeveloperPage({
   };
 
   return (
-    <div className="min-h-screen p-2 sm:p-4 pb-20 sm:pb-24 relative">
-      {/* 배경 효과 */}
-      <div className="fixed inset-0 bg-white -z-10"></div>
-
-      {/* 연결 상태 및 플레이어 수 */}
-      <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 flex gap-2 sm:gap-3 flex-wrap">
-        <div
-          className={`px-2 py-1 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl font-semibold border text-xs sm:text-sm ${
-            connected
-              ? 'bg-green-100 text-green-700 border-green-300'
-              : 'bg-red-100 text-red-700 border-red-300'
-          }`}
-        >
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div
-              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
-                connected
-                  ? 'bg-green-400 animate-pulse'
-                  : 'bg-red-400'
-              }`}
-            ></div>
-            <span>
-              {connected ? '연결됨' : '연결 안됨'}
-            </span>
-          </div>
-        </div>
-        <div className="px-2 py-1 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl font-semibold bg-blue-100 text-blue-700 border border-blue-300 text-xs sm:text-sm">
-          👥 {playerCount}명 접속
-        </div>
-      </div>
-
-      {/* 헤더 */}
-      <div className="text-center mb-6 sm:mb-8">
-        <motion.h1
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xl sm:text-2xl md:text-3xl font-black mb-3 text-gray-900"
-        >
-          👨‍💻 개발 책임자
-        </motion.h1>
-        <div className="text-sm sm:text-base text-gray-600 mb-2">
-          라운드 {gameState.currentRound + 1} / {maxRounds}
-          {gameState.isPracticeMode && (
-            <span className="ml-2 text-yellow-600">
-              (연습 모드)
-            </span>
-          )}
-        </div>
-        {/* 라운드 타이머 */}
-        {gameState.isGameStarted &&
-          !gameState.isWaitingMode &&
-          gameState.roundTimer !== null && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold text-base sm:text-lg ${
-                gameState.roundTimer <= 60
-                  ? 'bg-red-100 text-red-700 border-2 border-red-300'
-                  : gameState.roundTimer <= 300
-                  ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-300'
-                  : 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-              }`}
-            >
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>
-                {Math.floor(gameState.roundTimer / 60)}:
-                {(gameState.roundTimer % 60)
-                  .toString()
-                  .padStart(2, '0')}
-              </span>
-            </motion.div>
-          )}
-      </div>
+    <div className="p-2 sm:p-4 pb-20 sm:pb-24 relative">
 
       {/* 게임 제어 버튼 */}
       <div className="flex justify-center gap-2 sm:gap-3 mb-6 sm:mb-8 flex-wrap px-2">
@@ -466,14 +397,7 @@ export default function DeveloperPage({
           <>
             <button
               onClick={() => {
-                setGameStartModal({
-                  type: 'practice',
-                  onConfirm: (shouldDelete) => {
-                    adminActions?.startPractice(
-                      shouldDelete
-                    );
-                  },
-                });
+                setScenarioSetupModal({ type: 'practice' });
               }}
               className="btn-secondary px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base flex items-center gap-2 border-2 border-yellow-400 hover:border-yellow-500"
             >
@@ -482,14 +406,7 @@ export default function DeveloperPage({
             </button>
             <button
               onClick={() => {
-                setGameStartModal({
-                  type: 'real',
-                  onConfirm: (shouldDelete) => {
-                    adminActions?.startRealGame(
-                      shouldDelete
-                    );
-                  },
-                });
+                setScenarioSetupModal({ type: 'real' });
               }}
               className="btn-primary px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base flex items-center gap-2"
             >
@@ -502,12 +419,7 @@ export default function DeveloperPage({
             {gameState.isPracticeMode && (
               <button
                 onClick={() => {
-                  setGameStartModal({
-                    type: 'real',
-                    onConfirm: () => {
-                      adminActions?.startRealGame();
-                    },
-                  });
+                  setScenarioSetupModal({ type: 'real' });
                 }}
                 className="btn-primary px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
               >
@@ -3085,12 +2997,32 @@ export default function DeveloperPage({
         }
       />
 
-      {/* 게임 시작 모달 */}
+      {/* 게임 시작 모달 (레거시) */}
       <GameStartModal
         isOpen={!!gameStartModal}
         onClose={() => setGameStartModal(null)}
         onConfirm={gameStartModal?.onConfirm || (() => {})}
         type={gameStartModal?.type || 'practice'}
+        gameState={gameState}
+        playerCount={playerCount}
+      />
+
+      {/* 시나리오 설정 모달 */}
+      <ScenarioSetupModal
+        isOpen={!!scenarioSetupModal}
+        onClose={() => setScenarioSetupModal(null)}
+        onStartGame={(stocks, rounds, shouldDelete) => {
+          const isPractice = scenarioSetupModal?.type === 'practice';
+          adminActions?.startGameWithScenario(stocks, rounds, isPractice, shouldDelete);
+          setScenarioSetupModal(null);
+          success(
+            '게임 시작',
+            isPractice ? '연습 게임이 시작되었습니다.' : '실제 게임이 시작되었습니다.',
+            3000
+          );
+        }}
+        type={scenarioSetupModal?.type || 'practice'}
+        socket={socket}
         gameState={gameState}
         playerCount={playerCount}
       />

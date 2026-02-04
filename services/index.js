@@ -8,6 +8,7 @@ import { TransactionService } from './TransactionService.js';
 import { HintService } from './HintService.js';
 import { RewardService } from './RewardService.js';
 import { AdminService } from './AdminService.js';
+import { IdempotencyService } from './IdempotencyService.js';
 
 /**
  * 모든 서비스를 초기화하고 의존성을 주입합니다.
@@ -28,6 +29,7 @@ export function createServices(io) {
   const hintService = new HintService(stateManager, dbHelpers);
   const rewardService = new RewardService(stateManager, dbHelpers, broadcastService);
   const adminService = new AdminService(dbHelpers);
+  const idempotencyService = new IdempotencyService();
 
   return {
     stateManager,
@@ -39,6 +41,7 @@ export function createServices(io) {
     hintService,
     rewardService,
     adminService,
+    idempotencyService,
     // dbHelpers도 필요한 경우 접근 가능하도록
     dbHelpers,
   };
@@ -54,6 +57,7 @@ export {
   HintService,
   RewardService,
   AdminService,
+  IdempotencyService,
 };
 
 export { stateManager };

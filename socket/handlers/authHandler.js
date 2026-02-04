@@ -13,6 +13,9 @@ export function registerAuthHandlers(socket, io, services) {
 
       // 다른 관리자들에게 목록 업데이트
       broadcastService.broadcastPlayerList();
+
+      // 로그아웃 성공 이벤트 emit (클라이언트가 이 이벤트를 기다림)
+      socket.emit('ADMIN_LOGOUT_SUCCESS', { message: '로그아웃되었습니다.' });
     }
   });
 
@@ -23,6 +26,8 @@ export function registerAuthHandlers(socket, io, services) {
     const result = adminService.authenticate(adminId, password);
 
     if (!result.success) {
+      // 인증 실패 이벤트 emit (클라이언트가 이 이벤트를 기다림)
+      socket.emit('ADMIN_AUTH_ERROR', { message: result.error });
       if (callback) {
         callback({ success: false, message: result.error });
       }
@@ -76,6 +81,10 @@ export function registerAuthHandlers(socket, io, services) {
 
     // 플레이어 리스트 브로드캐스트
     broadcastService.broadcastPlayerList();
+
+    // 인증 성공 이벤트 emit (클라이언트가 이 이벤트를 기다림)
+    console.log(`[ADMIN_AUTH] ADMIN_AUTH_SUCCESS 이벤트 전송: ${socket.id}`);
+    socket.emit('ADMIN_AUTH_SUCCESS');
 
     if (callback) {
       callback({ success: true, adminId });

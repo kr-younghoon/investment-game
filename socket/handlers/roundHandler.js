@@ -129,12 +129,8 @@ export function registerRoundHandlers(socket, io, services) {
     const prevRound = gameState.currentRound - 1;
     const scenarios = gameState.scenarios;
 
-    let scenarioIndex;
-    if (gameState.isPracticeMode) {
-      scenarioIndex = prevRound - 2;
-    } else {
-      scenarioIndex = prevRound - 2;
-    }
+    // 시나리오 인덱스: 라운드 2부터 시나리오가 시작됨
+    const scenarioIndex = prevRound - 2;
 
     const scenario = scenarioIndex >= 0 && scenarioIndex < scenarios.length
       ? scenarios[scenarioIndex]

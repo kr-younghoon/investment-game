@@ -11,6 +11,20 @@ export class BroadcastService {
   }
 
   /**
+   * 현재 게임에서 사용 중인 주식 목록 반환
+   */
+  getActiveStocks(isPractice) {
+    const gameState = this.state.getGameState();
+    if (gameState.customStocks && gameState.customStocks.length > 0) {
+      return gameState.customStocks;
+    }
+    if (isPractice !== undefined) {
+      return isPractice ? PRACTICE_STOCKS : STOCKS;
+    }
+    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+  }
+
+  /**
    * 거래 로그 업데이트 브로드캐스트 (관리자/디스플레이에만)
    */
   emitTransactionLogUpdate(transaction) {
@@ -28,7 +42,7 @@ export class BroadcastService {
   getCurrentPrices() {
     const gameState = this.state.getGameState();
     const prices = {};
-    const stockList = gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+    const stockList = this.getActiveStocks();
 
     stockList.forEach((stock) => {
       if (
@@ -67,24 +81,22 @@ export class BroadcastService {
   }
 
   /**
-   * 플레이어 총 자산 계산
+   * 플레이어 총 자산 계산 (순수 함수 - side effect 없음)
    */
   calculatePlayerTotalAsset(socketId, isPractice = false) {
     const playerData = this.state.getPlayerData(socketId, isPractice);
     if (!playerData) return 0;
 
-    // bonusPoints가 있으면 cash에 통합
-    if (playerData.bonusPoints && playerData.bonusPoints > 0) {
-      playerData.cash += playerData.bonusPoints;
-      playerData.bonusPoints = 0;
-    }
+    // bonusPoints를 포함하여 계산 (상태 변경 없음)
+    const cash = playerData.cash || 0;
+    const bonusPoints = playerData.bonusPoints || 0;
 
-    let total = playerData.cash;
+    let total = cash + bonusPoints;
     const currentPrices = this.getCurrentPrices();
-    const stockList = isPractice ? PRACTICE_STOCKS : STOCKS;
+    const stockList = this.getActiveStocks(isPractice);
 
     stockList.forEach((stock) => {
-      const qty = playerData.stocks[stock.id] || 0;
+      const qty = playerData.stocks?.[stock.id] || 0;
       const price = currentPrices[stock.id] || stock.basePrice;
       total += qty * price;
     });
@@ -171,25 +183,42 @@ export class BroadcastService {
       allowPlayerTrading: gameState.allowPlayerTrading,
       isTradingBlocked: gameState.isTradingBlocked,
       isLastRound: gameState.isLastRound,
+      customStocks: gameState.customStocks || null, // 커스텀 주식 정보 전달
     };
 
     this.io.emit('GAME_STATE_UPDATE', stateToSend);
     this.persistGameState();
 
     // 모든 플레이어에게 포트폴리오 업데이트
+    const activeStocks = this.getActiveStocks(gameState.isPracticeMode);
+
     dataMap.forEach((playerData, socketId) => {
       const socket = this.io.sockets.sockets.get(socketId);
       if (socket) {
         if (playerData.bonusPoints && playerData.bonusPoints > 0) {
           playerData.cash += playerData.bonusPoints;
           playerData.bonusPoints = 0;
+
+          // DB에도 반영하여 재접속 시 중복 적용 방지
+          if (playerData.dbId) {
+            try {
+              this.db.updatePlayerCashById(
+                playerData.dbId,
+                playerData.cash,
+                playerData.totalAsset || playerData.cash,
+                gameState.isPracticeMode
+              );
+            } catch (e) {
+              console.error('[broadcastGameState] bonusPoints DB 동기화 오류:', e);
+            }
+          }
         }
         const totalAsset = this.calculatePlayerTotalAsset(socketId, gameState.isPracticeMode);
         playerData.totalAsset = totalAsset;
 
         // 매수 평균가 계산
         const averageBuyPrices = {};
-        STOCKS.forEach((stock) => {
+        activeStocks.forEach((stock) => {
           const quantity = playerData.stocks[stock.id] || 0;
           if (quantity > 0) {
             const buyTransactions = playerData.transactions.filter(
@@ -255,6 +284,7 @@ export class BroadcastService {
     const dataMap = this.state.getPlayersData(gameState.isPracticeMode);
     const isPractice = gameState.isPracticeMode;
     const connectedPlayers = this.state.getConnectedPlayers();
+    const activeStocks = this.getActiveStocks(isPractice);
 
     // 닉네임별로 그룹화
     const nicknameMap = new Map();
@@ -332,7 +362,7 @@ export class BroadcastService {
         const playerTransactions = transactionsByPlayerId.get(dbPlayer.id) || [];
 
         const stocks = {};
-        STOCKS.forEach((stock) => {
+        activeStocks.forEach((stock) => {
           const dbStock = dbStocks.find((s) => s.stock_id === stock.id);
           stocks[stock.id] = dbStock ? dbStock.quantity : 0;
         });
@@ -351,7 +381,7 @@ export class BroadcastService {
         });
 
         let totalAsset = calculatedCash;
-        STOCKS.forEach((stock) => {
+        activeStocks.forEach((stock) => {
           const qty = stocks[stock.id] || 0;
           const price = currentPrices[stock.id] || stock.basePrice;
           totalAsset += qty * price;
@@ -477,7 +507,7 @@ export class BroadcastService {
 
     // 매수 평균가 계산
     const averageBuyPrices = {};
-    const stockList = isPractice ? PRACTICE_STOCKS : STOCKS;
+    const stockList = this.getActiveStocks(isPractice);
 
     stockList.forEach((stock) => {
       const quantity = playerData.stocks[stock.id] || 0;

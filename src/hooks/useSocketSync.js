@@ -35,7 +35,7 @@ function getSocketURL() {
 
 const SOCKET_URL = getSocketURL();
 
-export function useSocketSync(isAdmin = false) {
+export function useSocketSync(isAdmin = false, isDisplay = false) {
   const [gameState, setGameState] = useState({
     currentRound: 0,
     stockPrices: {},
@@ -53,6 +53,7 @@ export function useSocketSync(isAdmin = false) {
     isTradingBlocked: false, // 미니게임 진행 중 투자 차단 여부
     isPlayerTradingBlocked: false, // 개별 플레이어 투자 차단 여부
     blockedRewardAmount: null, // 차단 시 보상 금액
+    blockedMessage: null, // 차단 시 관리자 메시지
   });
   const [displayMessage, setDisplayMessage] =
     useState(null); // 전광판 메시지
@@ -85,6 +86,8 @@ export function useSocketSync(isAdmin = false) {
   const adminsListCallbackRef = useRef(null); // 운영자 계정 목록 콜백
   const adminSuccessCallbackRef = useRef(null); // 관리자 성공 콜백
   const minigameSuccessCallbackRef = useRef(null); // 미니게임 성공 콜백
+  const hintErrorCallbackRef = useRef(null); // 힌트 에러 콜백 (관리자)
+  const minigameCompleteCallbackRef = useRef(null); // 미니게임 완료 알림 콜백 (관리자)
   const rumorUpdateCallbackRef = useRef(null); // 찌라시 업데이트 콜백
 
   useEffect(() => {
@@ -100,7 +103,7 @@ export function useSocketSync(isAdmin = false) {
     // Socket 연결
     if (!socketRef.current) {
       console.log(
-        `[useSocketSync] Socket 연결 시도: ${SOCKET_URL} (관리자: ${isAdmin})`
+        `[useSocketSync] Socket 연결 시도: ${SOCKET_URL} (관리자: ${isAdmin}, 전광판: ${isDisplay})`
       );
       socketRef.current = io(SOCKET_URL, {
         transports: ['websocket', 'polling'],
@@ -133,6 +136,10 @@ export function useSocketSync(isAdmin = false) {
       if (!isAdmin) {
         // 플레이어는 연결 시 게임 상태 요청
         socket.emit('PLAYER_REQUEST_STATE');
+      }
+      // 전광판은 거래 로그를 구독
+      if (isDisplay) {
+        socket.emit('DISPLAY_REGISTER');
       }
     };
 
@@ -171,6 +178,16 @@ export function useSocketSync(isAdmin = false) {
       if (!isAdmin) {
         // 플레이어는 재연결 시 게임 상태 요청
         socket.emit('PLAYER_REQUEST_STATE');
+
+        // 저장된 닉네임으로 자동 재접속
+        const savedNickname = localStorage.getItem('mz_investment_nickname');
+        if (savedNickname) {
+          socket.emit('PLAYER_JOIN', savedNickname);
+        }
+      }
+      // 전광판은 재연결 시에도 다시 등록
+      if (isDisplay) {
+        socket.emit('DISPLAY_REGISTER');
       }
     };
 
@@ -314,6 +331,7 @@ export function useSocketSync(isAdmin = false) {
           ...prev,
           isPlayerTradingBlocked: data.isBlocked || false,
           blockedRewardAmount: data.rewardAmount || null,
+          blockedMessage: data.message || null,
         }));
       };
 
@@ -479,43 +497,45 @@ export function useSocketSync(isAdmin = false) {
     // 관리자 전용: 플레이어 수 업데이트
     if (isAdmin) {
       const handleAdminAuthSuccess = () => {
+        console.log('[useSocketSync] ADMIN_AUTH_SUCCESS 이벤트 수신');
         // 콜백이 있으면 호출
         if (socket.adminAuthSuccessCallback) {
+          console.log('[useSocketSync] adminAuthSuccessCallback 호출');
           socket.adminAuthSuccessCallback();
+        } else {
+          console.log('[useSocketSync] adminAuthSuccessCallback이 없음');
         }
         // 플레이어 리스트 요청
         socket.emit('ADMIN_REQUEST_PLAYER_LIST');
         // 게임 설정 요청
         socket.emit('ADMIN_REQUEST_GAME_SETTINGS');
       };
-      socket.off(
-        'ADMIN_AUTH_SUCCESS',
-        handleAdminAuthSuccess
-      );
+
+      // 기존 핸들러 모두 제거 후 새로 등록
+      socket.removeAllListeners('ADMIN_AUTH_SUCCESS');
       socket.on(
         'ADMIN_AUTH_SUCCESS',
         handleAdminAuthSuccess
       );
 
-      socket.on('ADMIN_AUTH_ERROR', (error) => {
-        // 비밀번호 인증이 제거되었으므로 에러는 무시
-        // 서버가 재시작되지 않았을 경우에만 발생할 수 있음
+      const handleAdminAuthError = (error) => {
+        console.log('[useSocketSync] ADMIN_AUTH_ERROR 이벤트 수신:', error);
         if (socket.adminAuthErrorCallback) {
           socket.adminAuthErrorCallback(error.message);
         }
-      });
+      };
+
+      socket.removeAllListeners('ADMIN_AUTH_ERROR');
+      socket.on('ADMIN_AUTH_ERROR', handleAdminAuthError);
 
       // 관리자용: 거래 로그 수신
       if (isAdmin) {
-        socket.on(
-          'TRANSACTION_LOG_UPDATE',
-          (transaction) => {
-            setTransactionLogs((prev) => [
-              ...prev,
-              transaction,
-            ]);
-          }
-        );
+        socket.on('TRANSACTION_LOG_UPDATE', (transaction) => {
+          setTransactionLogs((prev) => [
+            ...prev,
+            transaction,
+          ]);
+        });
         socket.on('TRANSACTION_LOGS_INIT', (logs) => {
           setTransactionLogs(logs);
         });
@@ -573,6 +593,30 @@ export function useSocketSync(isAdmin = false) {
         'ADMIN_ACTION_SUCCESS',
         handleAdminActionSuccess
       );
+
+      // 관리자용: 힌트 에러 수신
+      const handleHintError = (data) => {
+        const msg = data?.message || '힌트 처리 중 오류가 발생했습니다.';
+        console.error('[관리자 힌트 에러]', msg);
+        if (hintErrorCallbackRef.current) {
+          hintErrorCallbackRef.current(msg);
+        }
+      };
+
+      socket.off('HINT_GRANT_ERROR', handleHintError);
+      socket.off('HINT_BROADCAST_ERROR', handleHintError);
+      socket.on('HINT_GRANT_ERROR', handleHintError);
+      socket.on('HINT_BROADCAST_ERROR', handleHintError);
+
+      // 관리자용: 미니게임 완료 알림 수신
+      const handleMinigameCompleteNotification = (data) => {
+        console.log('[관리자] 미니게임 완료 알림:', data);
+        if (minigameCompleteCallbackRef.current) {
+          minigameCompleteCallbackRef.current(data);
+        }
+      };
+      socket.off('PLAYER_MINIGAME_COMPLETE_NOTIFICATION', handleMinigameCompleteNotification);
+      socket.on('PLAYER_MINIGAME_COMPLETE_NOTIFICATION', handleMinigameCompleteNotification);
 
       // 관리자용: 라운드 타이머 종료 알림
       const handleRoundTimerEnd = (data) => {
@@ -651,6 +695,21 @@ export function useSocketSync(isAdmin = false) {
         'GAME_SETTINGS_UPDATE',
         handleGameSettingsUpdate
       );
+    }
+
+    // 전광판(디스플레이)용: 거래 로그 수신 (isAdmin 블록 밖에서 등록)
+    if (isDisplay && !isAdmin) {
+      const handleDisplayTransactionLog = (transaction) => {
+        setTransactionLogs((prev) => [...prev, transaction]);
+      };
+      const handleDisplayTransactionInit = (logs) => {
+        setTransactionLogs(logs);
+      };
+
+      socket.off('TRANSACTION_LOG_UPDATE', handleDisplayTransactionLog);
+      socket.off('TRANSACTION_LOGS_INIT', handleDisplayTransactionInit);
+      socket.on('TRANSACTION_LOG_UPDATE', handleDisplayTransactionLog);
+      socket.on('TRANSACTION_LOGS_INIT', handleDisplayTransactionInit);
     }
 
     // 정리 함수는 제거하지 않음 (StrictMode에서도 연결 유지)
@@ -988,12 +1047,13 @@ export function useSocketSync(isAdmin = false) {
         unblockTrading: () => {
           socketRef.current?.emit('ADMIN_UNBLOCK_TRADING');
         },
-        blockTradingForPlayer: (socketId, rewardAmount) => {
+        blockTradingForPlayer: (socketId, rewardAmount, message) => {
           socketRef.current?.emit(
             'ADMIN_BLOCK_TRADING_FOR_PLAYER',
             {
               socketId,
               rewardAmount,
+              message,
             }
           );
         },
@@ -1063,6 +1123,16 @@ export function useSocketSync(isAdmin = false) {
             }
           );
         },
+        saveProviderRoundHints: (round, provider, hints) => {
+          socketRef.current?.emit(
+            'ADMIN_SAVE_PROVIDER_ROUND_HINTS',
+            {
+              round,
+              provider,
+              hints,
+            }
+          );
+        },
         requestRoundScenarios: () => {
           socketRef.current?.emit(
             'ADMIN_REQUEST_ROUND_SCENARIOS'
@@ -1083,6 +1153,30 @@ export function useSocketSync(isAdmin = false) {
             }
           );
         },
+        // 시나리오 관련 액션
+        getScenarios: (type = 'all') => {
+          socketRef.current?.emit('ADMIN_GET_SCENARIOS', { type });
+        },
+        saveScenario: (id, name, type, stocks, rounds) => {
+          socketRef.current?.emit('ADMIN_SAVE_SCENARIO', {
+            id,
+            name,
+            type,
+            stocks,
+            rounds,
+          });
+        },
+        deleteScenario: (id) => {
+          socketRef.current?.emit('ADMIN_DELETE_SCENARIO', { id });
+        },
+        startGameWithScenario: (stocks, rounds, isPractice = false, shouldDelete = false) => {
+          socketRef.current?.emit('ADMIN_START_GAME_WITH_SCENARIO', {
+            stocks,
+            rounds,
+            isPractice,
+            shouldDelete,
+          });
+        },
       }
     : null;
 
@@ -1098,21 +1192,28 @@ export function useSocketSync(isAdmin = false) {
           socketRef.current?.emit('PLAYER_JOIN', nickname);
         },
         buyStock: (stockId, quantity) => {
+          const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
           socketRef.current?.emit('PLAYER_BUY_STOCK', {
             stockId,
             quantity,
+            requestId,
           });
         },
         sellStock: (stockId, quantity) => {
+          const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
           socketRef.current?.emit('PLAYER_SELL_STOCK', {
             stockId,
             quantity,
+            requestId,
           });
         },
         requestTransactions: () => {
           socketRef.current?.emit(
             'PLAYER_REQUEST_TRANSACTIONS'
           );
+        },
+        signalMinigameComplete: () => {
+          socketRef.current?.emit('PLAYER_MINIGAME_COMPLETE');
         },
       }
     : null;
@@ -1197,6 +1298,20 @@ export function useSocketSync(isAdmin = false) {
       }
     : null;
 
+  // 힌트 에러 콜백 설정 함수 (관리자만)
+  const setHintErrorCallback = isAdmin
+    ? (callback) => {
+        hintErrorCallbackRef.current = callback;
+      }
+    : null;
+
+  // 미니게임 완료 알림 콜백 설정 함수 (관리자만)
+  const setMinigameCompleteCallback = isAdmin
+    ? (callback) => {
+        minigameCompleteCallbackRef.current = callback;
+      }
+    : null;
+
   // 찌라시 업데이트 콜백 설정 함수 (플레이어만)
   const setRumorUpdateCallback = !isAdmin
     ? (callback) => {
@@ -1235,5 +1350,7 @@ export function useSocketSync(isAdmin = false) {
     setRoundTimerEndCallback, // 라운드 타이머 종료 콜백 설정 함수
     setAdminsListCallback, // 운영자 계정 목록 콜백 설정 함수
     setAdminSuccessCallback, // 관리자 성공 콜백 설정 함수
+    setHintErrorCallback, // 힌트 에러 콜백 설정 함수
+    setMinigameCompleteCallback, // 미니게임 완료 알림 콜백 설정 함수
   };
 }

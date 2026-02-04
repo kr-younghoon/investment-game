@@ -1,16 +1,19 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Lightbulb,
   Check,
   TrendingUp,
   Gift,
-  Clock,
   Users,
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
 import { initialScenarios } from '../../data/initialScenarios';
+import {
+  PROVIDER_HINT_PRICES,
+  PROVIDER_HINT_POOLS,
+} from '../../data/providerHintPools';
 
 export default function HintShopPage({
   gameState,
@@ -18,95 +21,67 @@ export default function HintShopPage({
   transactionLogs,
   adminActions,
   playerCount,
+  setHintErrorCallback,
 }) {
   const { toasts, removeToast, success, error } =
     useToast();
-  const [activeTab, setActiveTab] = useState('grant'); // 'grant' or 'logs'
+  const [activeTab, setActiveTab] = useState('grant'); // 'grant' | 'register' | 'logs'
   const [selectedPlayerId, setSelectedPlayerId] =
     useState('');
   const [hintDifficulty, setHintDifficulty] =
     useState('이영훈 힌트');
-  const [hintPrice, setHintPrice] = useState('1000');
-  const [hintContent, setHintContent] = useState('');
+  const [hintContent, setHintContent] = useState(''); // 비우면 라운드 풀에서 랜덤 지급
+
+  const [registerRound, setRegisterRound] = useState(2);
+  const [registerProvider, setRegisterProvider] = useState(
+    '이영훈 힌트'
+  );
+  const [registerHintsText, setRegisterHintsText] =
+    useState('');
+
+  // 힌트 에러 콜백 등록
+  useEffect(() => {
+    if (setHintErrorCallback) {
+      setHintErrorCallback((msg) => {
+        error('힌트 오류', msg, 4000);
+      });
+    }
+    return () => {
+      if (setHintErrorCallback) {
+        setHintErrorCallback(null);
+      }
+    };
+  }, [setHintErrorCallback]);
+
+  const providerPrice =
+    PROVIDER_HINT_PRICES?.[hintDifficulty] ?? 0;
+
+  const maxRounds = gameState.isPracticeMode
+    ? 4
+    : initialScenarios.length + 1;
+
+  const roundOptions = useMemo(() => {
+    // 실제 게임 라운드 표기 기준(1~)의 힌트 등록 라운드: 2 ~ maxRounds-1
+    const start = 2;
+    const end = Math.max(2, maxRounds - 1);
+    const arr = [];
+    for (let r = start; r <= end; r++) arr.push(r);
+    return arr;
+  }, [maxRounds]);
 
   // 힌트 로그만 필터링
   const hintLogs = transactionLogs.filter(
     (log) => log.type === 'HINT_PURCHASE'
   );
 
-  // 최대 라운드 계산
-  const maxRounds = gameState.isPracticeMode
-    ? 4
-    : initialScenarios.length + 1;
+  const suggestedHints = useMemo(() => {
+    const byProvider = PROVIDER_HINT_POOLS?.[registerProvider];
+    const pool = byProvider?.[registerRound];
+    return Array.isArray(pool) ? pool.join('\n') : '';
+  }, [registerProvider, registerRound]);
 
   return (
-    <div className="min-h-screen p-2 sm:p-4 pb-20 sm:pb-24 relative">
-      {/* 배경 효과 */}
-      <div className="fixed inset-0 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 -z-10"></div>
-
-      {/* 게임 상태 정보 */}
-      <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 flex gap-2 sm:gap-3 flex-wrap">
-        {!gameState.isGameStarted ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="px-2 py-1 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl font-semibold bg-gray-100 text-gray-700 border border-gray-300 text-xs sm:text-sm"
-          >
-            ⏸️ 게임 시작 전
-          </motion.div>
-        ) : null}
-        <div className="px-2 py-1 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl font-semibold bg-blue-100 text-blue-700 border border-blue-300 text-xs sm:text-sm">
-          <Users className="w-3 h-3 sm:w-4 sm:h-4 inline-block mr-1" />
-          {playerCount || 0}명 접속
-        </div>
-      </div>
-
-      {/* 헤더 */}
-      <div className="text-center mb-4 sm:mb-6">
-        <motion.h1
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xl sm:text-2xl md:text-3xl font-black mb-2 gradient-text"
-        >
-          💡 힌트 상점
-        </motion.h1>
-        {gameState.isGameStarted && (
-          <>
-            <div className="text-sm sm:text-base text-gray-600 mb-2">
-              라운드 {gameState.currentRound + 1} /{' '}
-              {maxRounds}
-              {gameState.isPracticeMode && (
-                <span className="ml-2 text-yellow-600">
-                  (연습 모드)
-                </span>
-              )}
-            </div>
-            {/* 라운드 타이머 */}
-            {!gameState.isWaitingMode &&
-              gameState.roundTimer !== null && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full font-bold text-base sm:text-lg ${
-                    gameState.roundTimer <= 60
-                      ? 'bg-red-100 text-red-700 border-2 border-red-300'
-                      : gameState.roundTimer <= 300
-                      ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-300'
-                      : 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-                  }`}
-                >
-                  <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span>
-                    {Math.floor(gameState.roundTimer / 60)}:
-                    {(gameState.roundTimer % 60)
-                      .toString()
-                      .padStart(2, '0')}
-                  </span>
-                </motion.div>
-              )}
-          </>
-        )}
-      </div>
+    <div className="p-2 sm:p-4 pb-20 sm:pb-24 relative">
 
       {/* 탭 메뉴 */}
       <div className="flex gap-2 mb-4 sm:mb-6 border-b border-gray-200">
@@ -120,6 +95,17 @@ export default function HintShopPage({
         >
           <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 inline-block mr-2" />
           힌트 부여
+        </button>
+        <button
+          onClick={() => setActiveTab('register')}
+          className={`px-4 py-2 sm:py-3 text-sm sm:text-base font-semibold transition-all border-b-2 ${
+            activeTab === 'register'
+              ? 'border-purple-500 text-purple-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Gift className="w-4 h-4 sm:w-5 sm:h-5 inline-block mr-2" />
+          힌트 등록
         </button>
         <button
           onClick={() => setActiveTab('logs')}
@@ -208,37 +194,25 @@ export default function HintShopPage({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* 금액 입력 */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  힌트 금액 (₩)
-                </label>
-                <input
-                  type="number"
-                  value={hintPrice}
-                  onChange={(e) =>
-                    setHintPrice(e.target.value)
-                  }
-                  min="0"
-                  step="100"
-                  placeholder="금액을 입력하세요"
-                  className="input-modern w-full"
-                />
+                <div className="mt-2 text-sm text-gray-600">
+                  가격: <span className="font-bold text-gray-900">₩{providerPrice.toLocaleString('ko-KR')}</span>
+                  <span className="ml-2 text-gray-500">
+                    (힌트 내용이 비어있으면 현재 라운드의 등록 풀에서 랜덤 지급)
+                  </span>
+                </div>
               </div>
 
               {/* 힌트 내용 입력 */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  힌트 내용
+                  힌트 내용 (선택)
                 </label>
                 <textarea
                   value={hintContent}
                   onChange={(e) =>
                     setHintContent(e.target.value)
                   }
-                  placeholder="힌트 내용을 입력하세요"
+                  placeholder="비워두면 현재 라운드에 등록된 힌트 중 랜덤으로 지급됩니다."
                   className="input-modern w-full min-h-[100px]"
                 />
               </div>
@@ -254,20 +228,11 @@ export default function HintShopPage({
                     );
                     return;
                   }
-                  const price = parseInt(hintPrice);
-                  if (isNaN(price) || price < 0) {
-                    error(
-                      '오류',
-                      '올바른 금액을 입력해주세요.',
-                      3000
-                    );
-                    return;
-                  }
                   if (adminActions) {
                     adminActions.grantHint(
                       selectedPlayerId,
                       hintDifficulty,
-                      price,
+                      providerPrice,
                       hintContent || null
                     );
                     const selectedPlayer = playerList.find(
@@ -278,22 +243,176 @@ export default function HintShopPage({
                       `${
                         selectedPlayer?.nickname ||
                         '플레이어'
-                      }에게 ${hintDifficulty}를 부여했습니다. (₩${price.toLocaleString(
+                      }에게 ${hintDifficulty}를 부여했습니다. (₩${providerPrice.toLocaleString(
                         'ko-KR'
                       )})`,
                       3000
                     );
                     setSelectedPlayerId('');
                     setHintDifficulty('이영훈 힌트');
-                    setHintPrice('1000');
                     setHintContent('');
                   }
                 }}
-                disabled={!selectedPlayerId || !hintPrice}
+                disabled={!selectedPlayerId}
                 className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold rounded-lg text-sm transition-all flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
-                힌트 부여하기
+                선택 플레이어에게 부여
+              </button>
+
+              {/* 전체 플레이어 힌트 부여 버튼 */}
+              <button
+                onClick={() => {
+                  if (playerList.length === 0) {
+                    error('오류', '접속 중인 플레이어가 없습니다.', 3000);
+                    return;
+                  }
+                  if (adminActions) {
+                    adminActions.grantHintToAll(
+                      hintDifficulty,
+                      providerPrice,
+                      hintContent || null
+                    );
+                    success(
+                      '전체 힌트 부여',
+                      `전체 플레이어(${playerList.length}명)에게 ${hintDifficulty}를 부여했습니다. (₩${providerPrice.toLocaleString('ko-KR')})`,
+                      3000
+                    );
+                    setHintContent('');
+                  }
+                }}
+                disabled={playerList.length === 0}
+                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold rounded-lg text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Users className="w-5 h-5" />
+                전체 플레이어에게 부여 ({playerList.length}명)
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* 힌트 등록 탭 */}
+        {activeTab === 'register' && (
+          <motion.div
+            key="register"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            className="card-modern p-3 sm:p-4 mb-4 sm:mb-6"
+          >
+            <h2 className="text-lg sm:text-xl font-bold gradient-text mb-3 sm:mb-4 flex items-center gap-2">
+              <Gift className="w-5 h-5 sm:w-6 sm:h-6" />
+              라운드별 힌트 풀 등록
+            </h2>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    라운드(표시)
+                  </label>
+                  <select
+                    value={registerRound}
+                    onChange={(e) =>
+                      setRegisterRound(Number(e.target.value))
+                    }
+                    className="input-modern w-full"
+                  >
+                    {roundOptions.map((r) => (
+                      <option key={r} value={r}>
+                        라운드 {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    제공자(힌트 꾸러미)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      '이영훈 힌트',
+                      '김민철 힌트',
+                      '조은별 힌트',
+                    ].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setRegisterProvider(p)}
+                        className={`px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
+                          registerProvider === p
+                            ? p === '이영훈 힌트'
+                              ? 'bg-blue-500 text-white shadow-md'
+                              : p === '김민철 힌트'
+                              ? 'bg-purple-500 text-white shadow-md'
+                              : 'bg-pink-500 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-sm text-gray-600">
+                    고정 가격: <span className="font-bold text-gray-900">₩{(PROVIDER_HINT_PRICES?.[registerProvider] ?? 0).toLocaleString('ko-KR')}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  힌트 목록 (줄바꿈으로 여러 개)
+                </label>
+                <textarea
+                  value={registerHintsText}
+                  onChange={(e) => setRegisterHintsText(e.target.value)}
+                  placeholder={suggestedHints ? `기본값 예시:\n${suggestedHints}` : '힌트를 한 줄에 하나씩 입력하세요.'}
+                  className="input-modern w-full min-h-[180px]"
+                />
+                {suggestedHints && !registerHintsText.trim() && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    위 예시는 기본 제공 풀입니다. 그대로 등록하려면 아래 버튼을 눌러 자동 채우기 후 저장하세요.
+                  </div>
+                )}
+                {suggestedHints && !registerHintsText.trim() && (
+                  <button
+                    onClick={() => setRegisterHintsText(suggestedHints)}
+                    className="mt-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold"
+                  >
+                    기본 예시로 채우기
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  if (!adminActions?.saveProviderRoundHints) {
+                    error('오류', '관리자 액션을 사용할 수 없습니다.', 3000);
+                    return;
+                  }
+                  const hints = registerHintsText
+                    .split('\n')
+                    .map((h) => h.trim())
+                    .filter((h) => h.length > 0);
+                  if (hints.length === 0) {
+                    error('오류', '힌트를 1개 이상 입력해주세요.', 3000);
+                    return;
+                  }
+                  adminActions.saveProviderRoundHints(
+                    registerRound,
+                    registerProvider,
+                    hints
+                  );
+                  success(
+                    '저장 완료',
+                    `라운드 ${registerRound} / ${registerProvider} 힌트 ${hints.length}개를 저장했습니다.`,
+                    3000
+                  );
+                }}
+                className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold rounded-lg text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Check className="w-5 h-5" />
+                힌트 풀 저장하기
               </button>
             </div>
           </motion.div>

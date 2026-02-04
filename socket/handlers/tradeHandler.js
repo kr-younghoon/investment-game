@@ -4,10 +4,31 @@ import { STOCKS, PRACTICE_STOCKS } from '../../src/data/initialScenarios.js';
  * Trade Handler - 매매 관련 핸들러
  */
 export function registerTradeHandlers(socket, io, services) {
-  const { stateManager, tradingService, transactionService, broadcastService } = services;
+  const { stateManager, tradingService, transactionService, broadcastService, idempotencyService } = services;
+
+  // 현재 게임에서 사용 중인 주식 목록 가져오기
+  const getActiveStocks = () => {
+    const gs = stateManager.getGameState();
+    if (gs.customStocks && gs.customStocks.length > 0) return gs.customStocks;
+    return gs.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+  };
 
   // 플레이어 주식 매수
   socket.on('PLAYER_BUY_STOCK', (data) => {
+    // 중복 요청 확인
+    if (data?.requestId && idempotencyService) {
+      const cached = idempotencyService.getProcessedResult(data.requestId);
+      if (cached) {
+        if (cached.success) {
+          socket.emit('PLAYER_PORTFOLIO_UPDATE', cached.portfolio);
+          socket.emit('TRADE_EXECUTED', cached.tradeInfo);
+        } else {
+          socket.emit('TRANSACTION_ERROR', { message: cached.error });
+        }
+        return;
+      }
+    }
+
     const gameState = stateManager.getGameState();
 
     // 거래 가능 여부 검증
@@ -17,16 +38,27 @@ export function registerTradeHandlers(socket, io, services) {
       return;
     }
 
-    const { stockId, quantity } = data;
+    const { stockId, quantity } = data || {};
+
+    // 종목 검증
+    if (!stockId) {
+      socket.emit('TRANSACTION_ERROR', { message: '종목을 선택해주세요.' });
+      return;
+    }
 
     // 수량 검증
-    if (!quantity || quantity <= 0) {
+    if (!quantity || quantity <= 0 || !Number.isInteger(quantity)) {
       socket.emit('TRANSACTION_ERROR', { message: '수량을 확인해주세요.' });
       return;
     }
 
     // 매수 실행
     const result = tradingService.executeBuy(socket.id, stockId, quantity);
+
+    // 결과 캐시 저장
+    if (data?.requestId && idempotencyService) {
+      idempotencyService.storeResult(data.requestId, result);
+    }
 
     if (!result.success) {
       socket.emit('TRANSACTION_ERROR', { message: result.error });
@@ -45,7 +77,7 @@ export function registerTradeHandlers(socket, io, services) {
     broadcastService.broadcastPlayerList();
     broadcastService.broadcastGameState();
 
-    const stock = (gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS).find(
+    const stock = getActiveStocks().find(
       (s) => s.id === stockId
     );
     console.log(
@@ -55,6 +87,20 @@ export function registerTradeHandlers(socket, io, services) {
 
   // 플레이어 주식 매도
   socket.on('PLAYER_SELL_STOCK', (data) => {
+    // 중복 요청 확인
+    if (data?.requestId && idempotencyService) {
+      const cached = idempotencyService.getProcessedResult(data.requestId);
+      if (cached) {
+        if (cached.success) {
+          socket.emit('PLAYER_PORTFOLIO_UPDATE', cached.portfolio);
+          socket.emit('TRADE_EXECUTED', cached.tradeInfo);
+        } else {
+          socket.emit('TRANSACTION_ERROR', { message: cached.error });
+        }
+        return;
+      }
+    }
+
     const gameState = stateManager.getGameState();
 
     // 거래 가능 여부 검증
@@ -64,16 +110,27 @@ export function registerTradeHandlers(socket, io, services) {
       return;
     }
 
-    const { stockId, quantity } = data;
+    const { stockId, quantity } = data || {};
+
+    // 종목 검증
+    if (!stockId) {
+      socket.emit('TRANSACTION_ERROR', { message: '종목을 선택해주세요.' });
+      return;
+    }
 
     // 수량 검증
-    if (!quantity || quantity <= 0) {
+    if (!quantity || quantity <= 0 || !Number.isInteger(quantity)) {
       socket.emit('TRANSACTION_ERROR', { message: '수량을 확인해주세요.' });
       return;
     }
 
     // 매도 실행
     const result = tradingService.executeSell(socket.id, stockId, quantity);
+
+    // 결과 캐시 저장
+    if (data?.requestId && idempotencyService) {
+      idempotencyService.storeResult(data.requestId, result);
+    }
 
     if (!result.success) {
       socket.emit('TRANSACTION_ERROR', { message: result.error });
@@ -92,7 +149,7 @@ export function registerTradeHandlers(socket, io, services) {
     broadcastService.broadcastPlayerList();
     broadcastService.broadcastGameState();
 
-    const stock = (gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS).find(
+    const stock = getActiveStocks().find(
       (s) => s.id === stockId
     );
     console.log(
@@ -104,12 +161,30 @@ export function registerTradeHandlers(socket, io, services) {
   socket.on('ADMIN_EXECUTE_TRADE', (data) => {
     if (!stateManager.isAdmin(socket)) return;
 
-    const { socketId, stockId, quantity, type } = data;
+    const { socketId, stockId, quantity, type } = data || {};
     const adminId = stateManager.getAdminId(socket.id);
     const gameState = stateManager.getGameState();
 
+    // 플레이어 검증
+    if (!socketId) {
+      socket.emit('ADMIN_TRADE_ERROR', { message: '플레이어를 선택해주세요.' });
+      return;
+    }
+
+    // 종목 검증
+    if (!stockId) {
+      socket.emit('ADMIN_TRADE_ERROR', { message: '종목을 선택해주세요.' });
+      return;
+    }
+
+    // 거래 유형 검증
+    if (!type || (type !== 'BUY' && type !== 'SELL')) {
+      socket.emit('ADMIN_TRADE_ERROR', { message: '거래 유형을 확인해주세요.' });
+      return;
+    }
+
     // 수량 검증
-    if (!quantity || quantity <= 0) {
+    if (!quantity || quantity <= 0 || !Number.isInteger(quantity)) {
       socket.emit('ADMIN_TRADE_ERROR', { message: '수량을 확인해주세요.' });
       return;
     }
@@ -127,7 +202,7 @@ export function registerTradeHandlers(socket, io, services) {
     if (playerSocket) {
       playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', result.portfolio);
 
-      const stock = (gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS).find(
+      const stock = getActiveStocks().find(
         (s) => s.id === stockId
       );
       playerSocket.emit('TRADE_EXECUTED', {

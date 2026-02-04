@@ -65,7 +65,7 @@ export default function PlayerPage() {
     setNicknameErrorCallback,
     setMinigameSuccessCallback,
     socket,
-  } = useSocketSync(false);
+  } = useSocketSync(false, false);
   const [nickname, setNickname] = useState('');
   const [hideGameOverScreen, setHideGameOverScreen] =
     useState(false); // 게임 종료 화면 숨김 여부
@@ -105,6 +105,12 @@ export default function PlayerPage() {
   const [showTutorialModal, setShowTutorialModal] =
     useState(false); // 튜토리얼 모달 표시 여부
   const [tutorialStep, setTutorialStep] = useState(0); // 튜토리얼 단계
+  const wasDisconnectedRef = useRef(false); // 재연결 감지용
+
+  // 현재 게임에서 사용 중인 주식 목록 (커스텀 주식 지원)
+  const activeStocks = (gameState.customStocks && gameState.customStocks.length > 0)
+    ? gameState.customStocks
+    : (gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS);
 
   // 거래 내역 탭이 활성화되면 자동으로 요청
   const hasRequestedTransactionsRef = useRef(false);
@@ -175,6 +181,18 @@ export default function PlayerPage() {
       setHasAttemptedAutoLogin(false);
     }
   }, [connected]);
+
+  // 재연결 감지 → 토스트 표시
+  useEffect(() => {
+    if (!connected) {
+      wasDisconnectedRef.current = true;
+    } else if (connected && wasDisconnectedRef.current) {
+      wasDisconnectedRef.current = false;
+      if (isLoggedIn) {
+        info('재연결됨', '서버에 다시 연결되었습니다.', 3000);
+      }
+    }
+  }, [connected, isLoggedIn, info]);
 
   // 자동 로그인: 저장된 닉네임이 있고 연결되었을 때 (한 번만 시도, 사용자가 입력 중이 아닐 때만)
   useEffect(() => {
@@ -453,7 +471,7 @@ export default function PlayerPage() {
 
       // 이전 라운드의 주식 가격 저장
       const currentPrices = {};
-      STOCKS.forEach((stock) => {
+      activeStocks.forEach((stock) => {
         const priceHistory =
           gameState.priceHistory?.[stock.id] || [];
         if (priceHistory.length > 0 && previousRound >= 0) {
@@ -798,7 +816,7 @@ export default function PlayerPage() {
     )
       .filter(([_, qty]) => qty > 0)
       .map(([stockId, qty]) => {
-        const stock = STOCKS.find((s) => s.id === stockId);
+        const stock = activeStocks.find((s) => s.id === stockId);
         const currentPrice =
           gameState.stockPrices?.[stockId]?.[
             gameState.currentRound
@@ -1752,10 +1770,7 @@ export default function PlayerPage() {
                       )}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                         {/* 연습 모드일 때는 연습용 주식들 표시 */}
-                        {(gameState.isPracticeMode
-                          ? PRACTICE_STOCKS
-                          : STOCKS
-                        ).map((stock, index) => {
+                        {activeStocks.map((stock, index) => {
                           const priceHistory =
                             gameState.priceHistory?.[
                               stock.id
@@ -1899,10 +1914,7 @@ export default function PlayerPage() {
                             {(() => {
                               // 보유 수량이 0보다 큰 주식만 필터링
                               // 연습 모드일 때는 연습용 주식들 확인
-                              const stocksToCheck =
-                                gameState.isPracticeMode
-                                  ? PRACTICE_STOCKS
-                                  : STOCKS;
+                              const stocksToCheck = activeStocks;
                               const ownedStocks =
                                 stocksToCheck.filter(
                                   (stock) => {
@@ -2338,7 +2350,7 @@ export default function PlayerPage() {
                           </h3>
                           <p className="text-sm text-gray-600">
                             현재 라운드:{' '}
-                            {gameState.currentRound + 1}
+                            {gameState.currentRound}
                           </p>
                         </div>
 
@@ -2350,6 +2362,11 @@ export default function PlayerPage() {
                                 ? practiceScenarios
                                 : initialScenarios;
 
+                            const currentDisplayRound =
+                              gameState.isPracticeMode
+                                ? gameState.currentRound
+                                : gameState.currentRound;
+
                             const filteredScenarios =
                               scenarios
                                 .map((scenario, index) => {
@@ -2358,15 +2375,13 @@ export default function PlayerPage() {
                                   if (
                                     gameState.isPracticeMode
                                   ) {
-                                    // 연습 모드: 시나리오 인덱스를 라운드 번호로 변환
-                                    // scenarios[0] → 라운드 1, scenarios[1] → 라운드 2, scenarios[2] → 라운드 3
+                                    // 연습 모드: 라운드 0(뉴스 없음), 라운드 1(뉴스 없음), 라운드 2→scenarios[0](12월), 라운드 3→scenarios[1](1월), 라운드 4→scenarios[2](2월)
                                     displayRound =
-                                      index + 1;
+                                      index + 2; // scenarios[0] → 라운드 2, scenarios[1] → 라운드 3, scenarios[2] → 라운드 4
                                   } else {
-                                    // 실제 게임 모드: scenarios[0] → 라운드 1, scenarios[1] → 라운드 2, ...
-                                    // 라운드 1 → scenarios[0] (1~2월), 라운드 2 → scenarios[1] (3~4월)
+                                    // 실제 게임 모드: 라운드 1(뉴스 없음), 라운드 2→scenarios[0](1~2월), 라운드 3→scenarios[1](3~4월), ...
                                     displayRound =
-                                      index + 1;
+                                      index + 2; // scenarios[0] → 라운드 2, scenarios[1] → 라운드 3, scenarios[2] → 라운드 4
                                   }
 
                                   return {
@@ -2387,26 +2402,12 @@ export default function PlayerPage() {
                                       return false;
                                     }
 
-                                    // 연습 모드 필터링
+                                    // 표시 라운드 기준으로 "현재 라운드 이하"만 보여주기
                                     if (
-                                      gameState.isPracticeMode
+                                      displayRound >
+                                      currentDisplayRound
                                     ) {
-                                      // 연습 모드에서는 라운드 1 이상만 표시하고, 현재 라운드 이하만 표시
-                                      if (
-                                        displayRound < 1 ||
-                                        displayRound >
-                                          gameState.currentRound
-                                      ) {
-                                        return false;
-                                      }
-                                    } else {
-                                      // 실제 모드: 현재 라운드 이하만 표시
-                                      if (
-                                        displayRound >
-                                        gameState.currentRound
-                                      ) {
-                                        return false;
-                                      }
+                                      return false;
                                     }
 
                                     // headline이 없으면 표시하지 않음
@@ -2432,10 +2433,10 @@ export default function PlayerPage() {
                                 }) => {
                                   const isCurrentRound =
                                     displayRound ===
-                                    gameState.currentRound;
+                                    currentDisplayRound;
                                   const isPastRound =
                                     displayRound <
-                                    gameState.currentRound;
+                                    currentDisplayRound;
 
                                   return (
                                     <motion.div
@@ -2480,8 +2481,7 @@ export default function PlayerPage() {
                                               }`}
                                             >
                                               라운드{' '}
-                                              {displayRound +
-                                                1}{' '}
+                                              {displayRound}{' '}
                                               (
                                               {
                                                 scenario.month
@@ -2985,11 +2985,7 @@ export default function PlayerPage() {
                         ]?.volatility;
                       })()
                 }
-                stocks={
-                  gameState.isPracticeMode
-                    ? PRACTICE_STOCKS
-                    : STOCKS
-                }
+                stocks={activeStocks}
                 isLastRound={gameState.isLastRound}
                 onClose={() => {
                   if (!gameState.isLastRound) {
@@ -3019,19 +3015,17 @@ export default function PlayerPage() {
                   volatility={
                     selectedRoundNews.scenario.volatility
                   }
-                  stocks={
-                    gameState.isPracticeMode
-                      ? PRACTICE_STOCKS
-                      : STOCKS
-                  }
+                  stocks={activeStocks}
                   onClose={() => setSelectedRoundNews(null)}
                 />
               )}
 
-              {/* 뉴스 티커 (0라운드와 연습 모드 라운드 1에서는 표시하지 않음) */}
+              {/* 뉴스 티커: 뉴스가 존재하면 라운드 번호와 무관하게 표시 */}
               {gameState.isGameStarted &&
                 !gameState.isWaitingMode &&
-                gameState.currentRound > 0 && (
+                (gameState.currentNews?.trim() ||
+                  (gameState.currentNewsBriefing || [])
+                    .length > 0) && (
                   <NewsTicker
                     headline={gameState.currentNews || ''}
                     newsBriefing={

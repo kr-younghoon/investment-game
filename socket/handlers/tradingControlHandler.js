@@ -8,7 +8,7 @@ export function registerTradingControlHandlers(socket, io, services) {
   socket.on('ADMIN_BLOCK_TRADING_FOR_PLAYER', (data) => {
     if (!stateManager.isAdmin(socket)) return;
 
-    const { socketId, rewardAmount } = data;
+    const { socketId, rewardAmount, message } = data;
     const gameState = stateManager.getGameState();
     const playerData = stateManager.getPlayerData(socketId, gameState.isPracticeMode);
 
@@ -20,6 +20,7 @@ export function registerTradingControlHandlers(socket, io, services) {
     stateManager.setPlayerTradingBlocked(socketId, {
       isBlocked: true,
       rewardAmount: rewardAmount || null,
+      message: message || null,
     });
 
     // 플레이어에게 알림
@@ -28,7 +29,7 @@ export function registerTradingControlHandlers(socket, io, services) {
       playerSocket.emit('PLAYER_TRADING_BLOCKED', {
         isBlocked: true,
         rewardAmount: rewardAmount || null,
-        message: '미니게임이 시작되었습니다. 투자가 일시 중단됩니다.',
+        message: message || '미니게임이 시작되었습니다. 투자가 일시 중단됩니다.',
       });
     }
 
@@ -80,6 +81,30 @@ export function registerTradingControlHandlers(socket, io, services) {
     console.log(`[ADMIN_UNBLOCK_TRADING_FOR_PLAYER] 거래 차단 해제: ${playerData.nickname}`);
   });
 
+  // 플레이어 미니게임 완료 신호
+  socket.on('PLAYER_MINIGAME_COMPLETE', () => {
+    const blockedInfo = stateManager.getPlayerTradingBlocked(socket.id);
+    if (!blockedInfo?.isBlocked) return;
+
+    const gameState = stateManager.getGameState();
+    const playerData = stateManager.getPlayerData(socket.id, gameState.isPracticeMode);
+    const nickname = playerData?.nickname || 'Unknown';
+
+    // 모든 관리자에게 알림
+    for (const adminSocketId of stateManager.adminSockets) {
+      const adminSocket = io.sockets.sockets.get(adminSocketId);
+      if (adminSocket) {
+        adminSocket.emit('PLAYER_MINIGAME_COMPLETE_NOTIFICATION', {
+          socketId: socket.id,
+          nickname,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    console.log(`[PLAYER_MINIGAME_COMPLETE] ${nickname} 미니게임 완료 신호`);
+  });
+
   // 전역 거래 차단
   socket.on('ADMIN_BLOCK_TRADING', () => {
     if (!stateManager.isAdmin(socket)) return;
@@ -114,8 +139,10 @@ export function registerTradingControlHandlers(socket, io, services) {
   socket.on('ADMIN_TOGGLE_PLAYER_TRADING', (data) => {
     if (!stateManager.isAdmin(socket)) return;
 
-    const { allow } = data;
-    stateManager.updateGameState({ allowPlayerTrading: !!allow });
+    const gameState = stateManager.getGameState();
+    // data가 있으면 allow 값 사용, 없으면 현재 상태 토글
+    const allow = data?.allow !== undefined ? !!data.allow : !gameState.allowPlayerTrading;
+    stateManager.updateGameState({ allowPlayerTrading: allow });
 
     broadcastService.broadcastGameState();
     console.log(`[ADMIN_TOGGLE_PLAYER_TRADING] 플레이어 직접 거래: ${allow ? '허용' : '비허용'}`);

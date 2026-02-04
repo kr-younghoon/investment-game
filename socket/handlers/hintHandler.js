@@ -78,7 +78,7 @@ export function registerHintHandlers(socket, io, services) {
       rumorToSend = gameState.scenarios[scenarioIndex]?.rumor || '';
     }
 
-    io.emit('RUMOR_UPDATE', { rumor: rumorToSend });
+    io.emit('PLAYER_RUMOR_UPDATE', { rumor: rumorToSend });
     console.log(`[ADMIN_BROADCAST_RUMOR] 루머 브로드캐스트`);
   });
 
@@ -136,13 +136,29 @@ export function registerHintHandlers(socket, io, services) {
   socket.on('ADMIN_GRANT_HINT', (data) => {
     if (!stateManager.isAdmin(socket)) return;
 
-    const { socketId, difficulty, content, price } = data;
+    const { socketId, difficulty, hintContent: content, price } = data;
     const gameState = stateManager.getGameState();
+    const currentGameId = gameState.gameId || 'legacy';
+    const displayRound = gameStateService.getDisplayRoundNumber();
+
+    // content가 null이면 해당 provider의 힌트 풀에서 랜덤 선택
+    let hintContent = content;
+    if (!hintContent) {
+      const hintPool = hintService.getProviderHintPool(currentGameId, displayRound, difficulty);
+      if (hintPool.length === 0) {
+        socket.emit('HINT_GRANT_ERROR', {
+          message: `${difficulty}의 라운드 ${displayRound} 힌트가 없습니다.`,
+        });
+        return;
+      }
+      const randomHints = hintService.getRandomHints(hintPool, 1);
+      hintContent = randomHints[0];
+    }
 
     const result = hintService.grantHint(
       socketId,
       difficulty,
-      content,
+      hintContent,
       price,
       gameState.currentRound,
       gameState.isPracticeMode
@@ -160,14 +176,14 @@ export function registerHintHandlers(socket, io, services) {
       playerSocket.emit('PLAYER_HINTS_UPDATE', playerData?.hints || []);
     }
 
-    console.log(`[ADMIN_GRANT_HINT] 힌트 부여: ${socketId}`);
+    console.log(`[ADMIN_GRANT_HINT] 힌트 부여: ${socketId} (${difficulty}: ${hintContent})`);
   });
 
   // 모든 플레이어에게 힌트 부여
   socket.on('ADMIN_GRANT_HINT_TO_ALL', (data) => {
     if (!stateManager.isAdmin(socket)) return;
 
-    const { difficulty, content, price } = data;
+    const { difficulty, hintContent: content, price } = data;
     const gameState = stateManager.getGameState();
 
     const results = hintService.grantHintToAll(
