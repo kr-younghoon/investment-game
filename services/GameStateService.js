@@ -1,4 +1,4 @@
-import { STOCKS, PRACTICE_STOCKS } from '../src/data/initialScenarios.js';
+import { getActiveStocks as _getActiveStocks } from '../shared/getActiveStocks.js';
 import { createGameId } from '../db.js';
 
 /**
@@ -21,11 +21,7 @@ export class GameStateService {
    * customStocks가 있으면 커스텀 주식, 없으면 기본 주식 사용
    */
   getActiveStocks() {
-    const gameState = this.state.getGameState();
-    if (gameState.customStocks && gameState.customStocks.length > 0) {
-      return gameState.customStocks;
-    }
-    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+    return _getActiveStocks(this.state.getGameState());
   }
 
   /**

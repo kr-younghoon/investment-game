@@ -1,10 +1,8 @@
-import { STOCKS, PRACTICE_STOCKS } from '../../src/data/initialScenarios.js';
+import { getActiveStocks as _getActiveStocks } from '../../shared/getActiveStocks.js';
 
 // 현재 게임에서 사용 중인 주식 목록 가져오기
 function getActiveStocks(stateManager, isPractice) {
-  const gs = stateManager.getGameState();
-  if (gs.customStocks && gs.customStocks.length > 0) return gs.customStocks;
-  return isPractice ? PRACTICE_STOCKS : STOCKS;
+  return _getActiveStocks(stateManager.getGameState(), isPractice);
 }
 
 /**

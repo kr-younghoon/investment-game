@@ -115,6 +115,7 @@ export const DEFAULT_GAME_STATE = {
   blockedRewardAmount: null,
   isLastRound: false,
   customStocks: null,
+  totalRounds: 12,
 };
 
 export const DEFAULT_GAME_SETTINGS = {
@@ -138,6 +139,7 @@ const GAME_STATE_KEYS = [
   'isTradingBlocked',
   'isLastRound',
   'customStocks',
+  'totalRounds',
 ];
 
 export function applyGameStateUpdate(previous, patch) {
@@ -196,6 +198,9 @@ export function applyGameStateUpdate(previous, patch) {
   }
   if (patch.customStocks !== undefined) {
     next.customStocks = patch.customStocks;
+  }
+  if (Number.isInteger(patch.totalRounds) && patch.totalRounds > 0) {
+    next.totalRounds = patch.totalRounds;
   }
 
   return next;

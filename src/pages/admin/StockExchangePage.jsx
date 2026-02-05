@@ -8,7 +8,6 @@ import Toast from '../../components/Toast';
 import {
   STOCKS,
   PRACTICE_STOCKS,
-  initialScenarios,
 } from '../../data/initialScenarios';
 
 export default function StockExchangePage({
@@ -28,10 +27,12 @@ export default function StockExchangePage({
   const [tradeType, setTradeType] = useState('BUY'); // 'BUY' or 'SELL'
   const [quantity, setQuantity] = useState('');
 
-  // 현재 주식 목록 (연습 모드 여부에 따라)
-  const currentStocks = gameState.isPracticeMode
-    ? PRACTICE_STOCKS
-    : STOCKS;
+  // 현재 주식 목록 (커스텀 주식 우선, 없으면 기본 주식)
+  const currentStocks = gameState.customStocks
+    ? gameState.customStocks
+    : gameState.isPracticeMode
+      ? PRACTICE_STOCKS
+      : STOCKS;
 
   // 현재 주식 가격 가져오기
   const getCurrentPrice = (stockId) => {
@@ -44,10 +45,8 @@ export default function StockExchangePage({
     return gameState.stockPrices[stockId];
   };
 
-  // 최대 라운드 계산
-  const maxRounds = gameState.isPracticeMode
-    ? 4
-    : initialScenarios.length + 1;
+  // 최대 라운드 계산 (서버에서 전달받은 totalRounds 사용)
+  const maxRounds = gameState.totalRounds || 12;
 
   // 선택된 플레이어 정보
   const selectedPlayer = playerList.find(

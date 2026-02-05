@@ -246,9 +246,9 @@ try {
   }
 }
 
-// 기본 운영자 계정 생성
-const defaultAdminId = '이영훈';
-const defaultPassword = '01087596957';
+// 기본 운영자 계정 생성 (환경변수 우선, 없으면 기본값)
+const defaultAdminId = process.env.ADMIN_ID || 'admin';
+const defaultPassword = process.env.ADMIN_PASSWORD || 'admin1234';
 const checkDefaultAdmin = db.prepare(
   'SELECT * FROM admins WHERE admin_id = ?'
 );

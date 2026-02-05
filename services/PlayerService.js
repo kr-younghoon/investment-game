@@ -1,3 +1,4 @@
+import { getActiveStocks as _getActiveStocks } from '../shared/getActiveStocks.js';
 import { STOCKS, PRACTICE_STOCKS } from '../src/data/initialScenarios.js';
 
 /**
@@ -13,14 +14,7 @@ export class PlayerService {
    * 현재 게임에서 사용 중인 주식 목록 반환
    */
   getActiveStocks(isPractice) {
-    const gameState = this.state.getGameState();
-    if (gameState.customStocks && gameState.customStocks.length > 0) {
-      return gameState.customStocks;
-    }
-    if (isPractice !== undefined) {
-      return isPractice ? PRACTICE_STOCKS : STOCKS;
-    }
-    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+    return _getActiveStocks(this.state.getGameState(), isPractice);
   }
 
   /**

@@ -788,6 +788,16 @@ export default function PlayerPage() {
               </span>
             </div>
           )}
+          {gameState.isPlayerTradingBlocked && playerActions && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => playerActions.signalMinigameComplete()}
+              className="mt-6 px-8 py-4 bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600 text-white font-bold text-xl rounded-2xl shadow-lg shadow-green-500/30 transition-all"
+            >
+              미니게임 완료!
+            </motion.button>
+          )}
         </motion.div>
       </div>
     );

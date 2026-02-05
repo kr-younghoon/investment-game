@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
-import { initialScenarios } from '../../data/initialScenarios';
 
 export default function ScenarioPage({
   gameState,
@@ -23,10 +22,8 @@ export default function ScenarioPage({
   const [roundRumors, setRoundRumors] = useState({}); // { round: rumor }
   const hasRequestedRef = useRef(false); // 한 번만 요청하도록 플래그
 
-  // 최대 라운드 계산
-  const maxRounds = gameState.isPracticeMode
-    ? 4
-    : initialScenarios.length + 1;
+  // 최대 라운드 계산 (서버에서 전달받은 totalRounds 사용)
+  const maxRounds = gameState.totalRounds || 12;
 
   // 관리자 에러 콜백 설정
   useEffect(() => {

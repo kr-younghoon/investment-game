@@ -66,17 +66,17 @@ export default function ScenarioSetupModal({
 
   // 모달이 열릴 때 시나리오 목록 불러오기
   useEffect(() => {
-    if (isOpen && socket) {
+    if (isOpen && adminActions) {
       loadScenarios();
     }
-  }, [isOpen, socket]);
+  }, [isOpen, adminActions]);
 
   // 시나리오 목록 불러오기
   const loadScenarios = () => {
-    if (!socket) return;
+    if (!adminActions) return;
     setIsLoading(true);
 
-    socket.emit('ADMIN_GET_SCENARIOS', { type: isPractice ? 'practice' : 'real' });
+    adminActions.getScenarios(isPractice ? 'practice' : 'real');
 
     const handleScenariosUpdate = (data) => {
       setScenarios(data.scenarios || []);
@@ -143,21 +143,16 @@ export default function ScenarioSetupModal({
 
   // 시나리오 저장
   const saveScenario = () => {
-    if (!socket || !scenarioName.trim()) return;
+    if (!adminActions || !scenarioName.trim()) return;
 
-    const scenarioData = {
-      id: selectedScenario?.id || null,
-      name: scenarioName.trim(),
-      type: isPractice ? 'practice' : 'real',
-      stocks,
-      rounds,
-    };
+    const scenarioId = selectedScenario?.id || null;
+    const scenarioType = isPractice ? 'practice' : 'real';
 
-    socket.emit('ADMIN_SAVE_SCENARIO', scenarioData);
+    adminActions.saveScenario(scenarioId, scenarioName.trim(), scenarioType, stocks, rounds);
 
     socket.once('SCENARIO_SAVED', (data) => {
       if (data.success) {
-        setSelectedScenario({ ...scenarioData, id: data.id });
+        setSelectedScenario({ id: data.id, name: scenarioName.trim(), type: scenarioType, stocks, rounds });
         loadScenarios();
       }
     });
@@ -165,9 +160,9 @@ export default function ScenarioSetupModal({
 
   // 시나리오 삭제
   const deleteScenario = (scenarioId) => {
-    if (!socket) return;
+    if (!adminActions) return;
 
-    socket.emit('ADMIN_DELETE_SCENARIO', { id: scenarioId });
+    adminActions.deleteScenario(scenarioId);
 
     socket.once('SCENARIO_DELETED', () => {
       loadScenarios();

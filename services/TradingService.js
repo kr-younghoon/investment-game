@@ -1,4 +1,4 @@
-import { STOCKS, PRACTICE_STOCKS } from '../src/data/initialScenarios.js';
+import { getActiveStocks } from '../shared/getActiveStocks.js';
 
 /**
  * TradingService - 매매 로직 및 유효성 검사
@@ -463,11 +463,7 @@ export class TradingService {
    * 종목 ID로 주식 정보 가져오기
    */
   _getStockById(stockId, isPractice) {
-    const gameState = this.state.getGameState();
-    const stockList = (gameState.customStocks && gameState.customStocks.length > 0)
-      ? gameState.customStocks
-      : (isPractice ? PRACTICE_STOCKS : STOCKS);
-    return stockList.find((s) => s.id === stockId);
+    return getActiveStocks(this.state.getGameState(), isPractice).find((s) => s.id === stockId);
   }
 }
 

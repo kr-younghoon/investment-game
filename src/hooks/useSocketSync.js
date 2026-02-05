@@ -531,10 +531,10 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
       // 관리자용: 거래 로그 수신
       if (isAdmin) {
         socket.on('TRANSACTION_LOG_UPDATE', (transaction) => {
-          setTransactionLogs((prev) => [
-            ...prev,
-            transaction,
-          ]);
+          setTransactionLogs((prev) => {
+            const next = [...prev, transaction];
+            return next.length > 200 ? next.slice(-200) : next;
+          });
         });
         socket.on('TRANSACTION_LOGS_INIT', (logs) => {
           setTransactionLogs(logs);
@@ -700,7 +700,10 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
     // 전광판(디스플레이)용: 거래 로그 수신 (isAdmin 블록 밖에서 등록)
     if (isDisplay && !isAdmin) {
       const handleDisplayTransactionLog = (transaction) => {
-        setTransactionLogs((prev) => [...prev, transaction]);
+        setTransactionLogs((prev) => {
+          const next = [...prev, transaction];
+          return next.length > 200 ? next.slice(-200) : next;
+        });
       };
       const handleDisplayTransactionInit = (logs) => {
         setTransactionLogs(logs);

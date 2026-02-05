@@ -1,4 +1,4 @@
-import { STOCKS, PRACTICE_STOCKS } from '../src/data/initialScenarios.js';
+import { getActiveStocks as _getActiveStocks } from '../shared/getActiveStocks.js';
 
 /**
  * BroadcastService - 게임 상태 브로드캐스트 담당
@@ -14,14 +14,7 @@ export class BroadcastService {
    * 현재 게임에서 사용 중인 주식 목록 반환
    */
   getActiveStocks(isPractice) {
-    const gameState = this.state.getGameState();
-    if (gameState.customStocks && gameState.customStocks.length > 0) {
-      return gameState.customStocks;
-    }
-    if (isPractice !== undefined) {
-      return isPractice ? PRACTICE_STOCKS : STOCKS;
-    }
-    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
+    return _getActiveStocks(this.state.getGameState(), isPractice);
   }
 
   /**
@@ -184,6 +177,7 @@ export class BroadcastService {
       isTradingBlocked: gameState.isTradingBlocked,
       isLastRound: gameState.isLastRound,
       customStocks: gameState.customStocks || null, // 커스텀 주식 정보 전달
+      totalRounds: this.state.getGameSettings().totalRounds,
     };
 
     this.io.emit('GAME_STATE_UPDATE', stateToSend);
