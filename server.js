@@ -11,10 +11,23 @@ import { closeDb } from './db.js';
 const app = express();
 const httpServer = createServer(app);
 
+// CORS 허용 origin 설정 (환경변수 또는 기본값)
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:5173', 'http://localhost:3001', 'http://127.0.0.1:5173'];
+
 // Socket.io 서버 설정
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
+    origin: (origin, callback) => {
+      // origin이 없으면 (같은 origin 요청) 허용
+      if (!origin) return callback(null, true);
+      // 허용된 origin 또는 개발 환경에서 허용
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+        return callback(null, true);
+      }
+      callback(new Error('CORS policy violation'));
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -39,12 +52,14 @@ initializeSocket(io, services);
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n서버 종료 중...');
+  services.idempotencyService?.destroy();
   closeDb();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n서버 종료 중...');
+  services.idempotencyService?.destroy();
   closeDb();
   process.exit(0);
 });

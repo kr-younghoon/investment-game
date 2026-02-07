@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { io } from 'socket.io-client';
 
 // 현재 호스트의 IP 주소 자동 감지
@@ -240,65 +240,73 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
     socket.on('GAME_STATE_UPDATE', handleGameStateUpdate);
 
     // 라운드 타이머 업데이트 수신
-    socket.on('ROUND_TIMER_UPDATE', (data) => {
+    const handleRoundTimerUpdate = (data) => {
       setGameState((prev) => ({
         ...prev,
         roundTimer: data.roundTimer,
       }));
-    });
+    };
+    socket.off('ROUND_TIMER_UPDATE', handleRoundTimerUpdate);
+    socket.on('ROUND_TIMER_UPDATE', handleRoundTimerUpdate);
 
     // 카운트다운 업데이트 수신
-    socket.on('ROUND_COUNTDOWN', (data) => {
-      console.log('카운트다운 업데이트:', data.countdown);
+    const handleRoundCountdown = (data) => {
       setGameState((prev) => ({
         ...prev,
         countdown: data.countdown,
       }));
-    });
+    };
+    socket.off('ROUND_COUNTDOWN', handleRoundCountdown);
+    socket.on('ROUND_COUNTDOWN', handleRoundCountdown);
 
     // 전광판 메시지 수신
-    socket.on('DISPLAY_MESSAGE', (data) => {
-      console.log('[전광판 메시지 수신]', data);
+    const handleDisplayMessage = (data) => {
       setDisplayMessage({
         message: data.message,
         adminId: data.adminId,
         timestamp: data.timestamp,
       });
-    });
+    };
+    socket.off('DISPLAY_MESSAGE', handleDisplayMessage);
+    socket.on('DISPLAY_MESSAGE', handleDisplayMessage);
 
     // 전광판 메시지 종료 수신
-    socket.on('CLOSE_DISPLAY_MESSAGE', () => {
-      console.log('[전광판 메시지 종료]');
+    const handleCloseDisplayMessage = () => {
       setDisplayMessage(null);
-    });
+    };
+    socket.off('CLOSE_DISPLAY_MESSAGE', handleCloseDisplayMessage);
+    socket.on('CLOSE_DISPLAY_MESSAGE', handleCloseDisplayMessage);
 
     // 게임 종료 수신
-    socket.on('GAME_END', (data) => {
-      console.log('[게임 종료]', data);
+    const handleGameEnd = () => {
       setGameState((prev) => ({
         ...prev,
         isGameEnded: true,
         isGameStarted: false,
         isWaitingMode: true,
       }));
-    });
+    };
+    socket.off('GAME_END', handleGameEnd);
+    socket.on('GAME_END', handleGameEnd);
 
     // 게임 재시작 수신 (게임 종료 상태 해제)
-    socket.on('GAME_RESTART', () => {
-      console.log('[게임 재시작]');
+    const handleGameRestart = () => {
       setGameState((prev) => ({
         ...prev,
         isGameEnded: false,
       }));
-    });
+    };
+    socket.off('GAME_RESTART', handleGameRestart);
+    socket.on('GAME_RESTART', handleGameRestart);
 
     // 플레이어 포트폴리오 업데이트 수신
-    socket.on('PLAYER_PORTFOLIO_UPDATE', (portfolio) => {
+    const handlePortfolioUpdate = (portfolio) => {
       if (!isAdmin) {
-        // 플레이어만 포트폴리오 업데이트 받음
         setGameState((prev) => ({ ...prev, portfolio }));
       }
-    });
+    };
+    socket.off('PLAYER_PORTFOLIO_UPDATE', handlePortfolioUpdate);
+    socket.on('PLAYER_PORTFOLIO_UPDATE', handlePortfolioUpdate);
 
     // 플레이어 힌트 업데이트 수신
     if (!isAdmin) {
@@ -394,28 +402,30 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
     }
 
     // 플레이어 전용: 보너스 포인트 추가 알림
+    const handleBonusPointsAdded = (data) => {
+      if (bonusPointsCallbackRef.current) {
+        bonusPointsCallbackRef.current(
+          data.points,
+          data.totalBonusPoints,
+          data.source,
+          data.round
+        );
+      }
+    };
     if (!isAdmin) {
-      socket.on('BONUS_POINTS_ADDED', (data) => {
-        // 콜백이 있으면 호출 (PlayerPage에서 Toast 표시용)
-        if (bonusPointsCallbackRef.current) {
-          bonusPointsCallbackRef.current(
-            data.points,
-            data.totalBonusPoints,
-            data.source, // 'minigame' 또는 undefined
-            data.round // 라운드 정보
-          );
-        }
-      });
+      socket.off('BONUS_POINTS_ADDED', handleBonusPointsAdded);
+      socket.on('BONUS_POINTS_ADDED', handleBonusPointsAdded);
     }
 
     // 거래 오류 수신
-    socket.on('TRANSACTION_ERROR', (error) => {
+    const handleTransactionError = (error) => {
       console.error('거래 오류:', error.message);
-      // 콜백이 있으면 호출 (PlayerPage에서 Toast 표시용)
       if (transactionErrorCallbackRef.current) {
         transactionErrorCallbackRef.current(error.message);
       }
-    });
+    };
+    socket.off('TRANSACTION_ERROR', handleTransactionError);
+    socket.on('TRANSACTION_ERROR', handleTransactionError);
 
     // 플레이어 전용: 거래 체결 알림
     if (!isAdmin) {
@@ -430,68 +440,57 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
     }
 
     // 플레이어 전용: 순위 업데이트 수신
+    const handlePlayerRankUpdate = (rankData) => {
+      setPlayerRank(rankData);
+    };
+    const handlePlayerRankListUpdate = (list) => {
+      setRankList(list);
+    };
     if (!isAdmin) {
-      socket.on('PLAYER_RANK_UPDATE', (rankData) => {
-        setPlayerRank(rankData);
-      });
-      socket.on('PLAYER_RANK_LIST_UPDATE', (list) => {
-        setRankList(list);
-      });
+      socket.off('PLAYER_RANK_UPDATE', handlePlayerRankUpdate);
+      socket.off('PLAYER_RANK_LIST_UPDATE', handlePlayerRankListUpdate);
+      socket.on('PLAYER_RANK_UPDATE', handlePlayerRankUpdate);
+      socket.on('PLAYER_RANK_LIST_UPDATE', handlePlayerRankListUpdate);
     }
 
     // 닉네임 오류 수신 (플레이어만)
+    const handleNicknameError = (error) => {
+      console.error('닉네임 오류:', error.message);
+      if (socket.nicknameErrorCallback) {
+        socket.nicknameErrorCallback(error.message);
+      }
+    };
+    const handleNicknameDuplicateKick = (data) => {
+      console.warn('중복 로그인으로 인한 연결 끊김:', data.message);
+      if (socket.nicknameErrorCallback) {
+        socket.nicknameErrorCallback(data.message);
+      }
+      socket.disconnect();
+    };
+    const handleAdminKick = (data) => {
+      console.warn('관리자에 의한 로그아웃:', data.message);
+      if (socket.nicknameErrorCallback) {
+        socket.nicknameErrorCallback(data.message);
+      }
+      socket.disconnect();
+    };
+    const handleAdminDelete = (data) => {
+      console.warn('관리자에 의한 계정 삭제:', data.message);
+      if (socket.nicknameErrorCallback) {
+        socket.nicknameErrorCallback(data.message);
+      }
+      localStorage.removeItem('mz_investment_nickname');
+      socket.disconnect();
+    };
     if (!isAdmin) {
-      socket.on('NICKNAME_ERROR', (error) => {
-        console.error('닉네임 오류:', error.message);
-        // 에러 콜백이 있으면 호출
-        if (socket.nicknameErrorCallback) {
-          socket.nicknameErrorCallback(error.message);
-        }
-      });
-
-      // 중복 로그인으로 인한 강제 연결 끊김 처리
-      socket.on('NICKNAME_DUPLICATE_KICK', (data) => {
-        console.warn(
-          '중복 로그인으로 인한 연결 끊김:',
-          data.message
-        );
-        // 에러 콜백이 있으면 호출 (PlayerPage에서 로그아웃 처리용)
-        if (socket.nicknameErrorCallback) {
-          socket.nicknameErrorCallback(data.message);
-        }
-        // 연결 끊기
-        socket.disconnect();
-      });
-
-      // 관리자에 의한 강제 로그아웃 처리
-      socket.on('ADMIN_KICK', (data) => {
-        console.warn(
-          '관리자에 의한 로그아웃:',
-          data.message
-        );
-        // 에러 콜백이 있으면 호출 (PlayerPage에서 로그아웃 처리용)
-        if (socket.nicknameErrorCallback) {
-          socket.nicknameErrorCallback(data.message);
-        }
-        // 연결 끊기
-        socket.disconnect();
-      });
-
-      // 관리자에 의한 계정 삭제 처리
-      socket.on('ADMIN_DELETE', (data) => {
-        console.warn(
-          '관리자에 의한 계정 삭제:',
-          data.message
-        );
-        // 에러 콜백이 있으면 호출 (PlayerPage에서 로그아웃 처리용)
-        if (socket.nicknameErrorCallback) {
-          socket.nicknameErrorCallback(data.message);
-        }
-        // localStorage에서 닉네임 삭제
-        localStorage.removeItem('mz_investment_nickname');
-        // 연결 끊기
-        socket.disconnect();
-      });
+      socket.off('NICKNAME_ERROR', handleNicknameError);
+      socket.off('NICKNAME_DUPLICATE_KICK', handleNicknameDuplicateKick);
+      socket.off('ADMIN_KICK', handleAdminKick);
+      socket.off('ADMIN_DELETE', handleAdminDelete);
+      socket.on('NICKNAME_ERROR', handleNicknameError);
+      socket.on('NICKNAME_DUPLICATE_KICK', handleNicknameDuplicateKick);
+      socket.on('ADMIN_KICK', handleAdminKick);
+      socket.on('ADMIN_DELETE', handleAdminDelete);
     }
 
     // 관리자 전용: 플레이어 수 업데이트
@@ -529,17 +528,19 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
       socket.on('ADMIN_AUTH_ERROR', handleAdminAuthError);
 
       // 관리자용: 거래 로그 수신
-      if (isAdmin) {
-        socket.on('TRANSACTION_LOG_UPDATE', (transaction) => {
-          setTransactionLogs((prev) => {
-            const next = [...prev, transaction];
-            return next.length > 200 ? next.slice(-200) : next;
-          });
+      const handleAdminTransactionLogUpdate = (transaction) => {
+        setTransactionLogs((prev) => {
+          const next = [...prev, transaction];
+          return next.length > 200 ? next.slice(-200) : next;
         });
-        socket.on('TRANSACTION_LOGS_INIT', (logs) => {
-          setTransactionLogs(logs);
-        });
-      }
+      };
+      const handleAdminTransactionLogsInit = (logs) => {
+        setTransactionLogs(logs);
+      };
+      socket.off('TRANSACTION_LOG_UPDATE', handleAdminTransactionLogUpdate);
+      socket.off('TRANSACTION_LOGS_INIT', handleAdminTransactionLogsInit);
+      socket.on('TRANSACTION_LOG_UPDATE', handleAdminTransactionLogUpdate);
+      socket.on('TRANSACTION_LOGS_INIT', handleAdminTransactionLogsInit);
 
       const handlePlayerCountUpdate = (count) => {
         setPlayerCount(count);
@@ -715,13 +716,47 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
       socket.on('TRANSACTION_LOGS_INIT', handleDisplayTransactionInit);
     }
 
-    // 정리 함수는 제거하지 않음 (StrictMode에서도 연결 유지)
-    // 실제 unmount 시에만 정리가 필요하지만, StrictMode에서는 구분이 어려움
-    // 따라서 이벤트 리스너는 위에서 중복 방지 처리하고, 연결은 유지
-  }, [isAdmin]);
+    // cleanup: 리스너 해제 (소켓 연결은 유지, 리스너만 제거)
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.off('reconnect', handleReconnect);
+      socket.off('reconnect_attempt', handleReconnectAttempt);
+      socket.off('reconnect_failed', handleReconnectFailed);
+      socket.off('GAME_STATE_UPDATE', handleGameStateUpdate);
+      socket.off('ROUND_TIMER_UPDATE', handleRoundTimerUpdate);
+      socket.off('ROUND_COUNTDOWN', handleRoundCountdown);
+      socket.off('DISPLAY_MESSAGE', handleDisplayMessage);
+      socket.off('CLOSE_DISPLAY_MESSAGE', handleCloseDisplayMessage);
+      socket.off('GAME_END', handleGameEnd);
+      socket.off('GAME_RESTART', handleGameRestart);
+      socket.off('PLAYER_PORTFOLIO_UPDATE', handlePortfolioUpdate);
+      socket.off('TRANSACTION_ERROR', handleTransactionError);
+      if (!isAdmin) {
+        socket.off('PLAYER_HINTS_UPDATE');
+        socket.off('PLAYER_TRADING_BLOCKED');
+        socket.off('MINIGAME_SUCCESS');
+        socket.off('PLAYER_RUMOR_UPDATE');
+        socket.off('PLAYER_TRANSACTIONS_UPDATE');
+        socket.off('BONUS_POINTS_ADDED', handleBonusPointsAdded);
+        socket.off('TRADE_EXECUTED');
+        socket.off('PLAYER_RANK_UPDATE', handlePlayerRankUpdate);
+        socket.off('PLAYER_RANK_LIST_UPDATE', handlePlayerRankListUpdate);
+        socket.off('NICKNAME_ERROR', handleNicknameError);
+        socket.off('NICKNAME_DUPLICATE_KICK', handleNicknameDuplicateKick);
+        socket.off('ADMIN_KICK', handleAdminKick);
+        socket.off('ADMIN_DELETE', handleAdminDelete);
+      }
+      if (isDisplay && !isAdmin) {
+        socket.off('TRANSACTION_LOG_UPDATE');
+        socket.off('TRANSACTION_LOGS_INIT');
+      }
+    };
+  }, [isAdmin, isDisplay]);
 
   // 관리자 액션 함수들
-  const adminActions = isAdmin
+  const adminActions = useMemo(() => isAdmin
     ? {
         authenticate: (data, onSuccess, onError) => {
           if (socketRef.current) {
@@ -1181,10 +1216,10 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
           });
         },
       }
-    : null;
+    : null, [isAdmin]);
 
   // 플레이어 액션
-  const playerActions = !isAdmin
+  const playerActions = useMemo(() => !isAdmin
     ? {
         join: (nickname, onError) => {
           // 에러 콜백 저장
@@ -1219,7 +1254,7 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
           socketRef.current?.emit('PLAYER_MINIGAME_COMPLETE');
         },
       }
-    : null;
+    : null, [isAdmin]);
 
   // 보너스 포인트 콜백 설정 함수 (플레이어만)
   const setBonusPointsCallback = !isAdmin

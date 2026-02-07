@@ -37,8 +37,15 @@ export function registerTradeHandlers(socket, io, services) {
     const { stockId, quantity } = data || {};
 
     // 종목 검증
-    if (!stockId) {
+    if (!stockId || typeof stockId !== 'string') {
       socket.emit('TRANSACTION_ERROR', { message: '종목을 선택해주세요.' });
+      return;
+    }
+
+    // 유효한 종목인지 확인
+    const stock = getActiveStocks().find((s) => s.id === stockId);
+    if (!stock) {
+      socket.emit('TRANSACTION_ERROR', { message: '유효하지 않은 종목입니다.' });
       return;
     }
 
@@ -109,8 +116,15 @@ export function registerTradeHandlers(socket, io, services) {
     const { stockId, quantity } = data || {};
 
     // 종목 검증
-    if (!stockId) {
+    if (!stockId || typeof stockId !== 'string') {
       socket.emit('TRANSACTION_ERROR', { message: '종목을 선택해주세요.' });
+      return;
+    }
+
+    // 유효한 종목인지 확인
+    const stock = getActiveStocks().find((s) => s.id === stockId);
+    if (!stock) {
+      socket.emit('TRANSACTION_ERROR', { message: '유효하지 않은 종목입니다.' });
       return;
     }
 
@@ -168,8 +182,15 @@ export function registerTradeHandlers(socket, io, services) {
     }
 
     // 종목 검증
-    if (!stockId) {
+    if (!stockId || typeof stockId !== 'string') {
       socket.emit('ADMIN_TRADE_ERROR', { message: '종목을 선택해주세요.' });
+      return;
+    }
+
+    // 유효한 종목인지 확인
+    const stock = getActiveStocks().find((s) => s.id === stockId);
+    if (!stock) {
+      socket.emit('ADMIN_TRADE_ERROR', { message: '유효하지 않은 종목입니다.' });
       return;
     }
 

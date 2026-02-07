@@ -25,6 +25,9 @@ export function registerDisconnectHandlers(socket, io, services) {
     if (stateManager.getConnectedPlayers().has(socket.id)) {
       stateManager.removeConnectedPlayer(socket.id);
 
+      // 플레이어 투자 차단 상태 정리 (메모리 누수 방지)
+      stateManager.deletePlayerTradingBlocked(socket.id);
+
       // 플레이어 수 업데이트
       broadcastService.broadcastPlayerCount();
       broadcastService.broadcastPlayerList();

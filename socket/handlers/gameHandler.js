@@ -157,7 +157,7 @@ export function registerGameHandlers(socket, io, services) {
 
     // 게임 설정 업데이트
     stateManager.setGameSettings({
-      totalRounds: initialScenarios.length,
+      totalRounds: initialScenarios.length + 1,
     });
 
     // 주식 가격 초기화

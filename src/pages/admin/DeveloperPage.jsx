@@ -118,10 +118,9 @@ export default function DeveloperPage({
   ];
 
   const isFirstRound = gameState.currentRound === 0;
-  // 연습 모드일 때는 4라운드 (라운드 0, 1, 2, 3), 실제 게임 모드일 때는 7라운드 (라운드 0~6)
-  const maxRounds = gameState.isPracticeMode
-    ? 4
-    : initialScenarios.length + 1; // 라운드 0 포함
+  // totalRounds는 서버에서 전달, 없으면 fallback
+  const maxRounds = gameState.totalRounds
+    || (gameState.isPracticeMode ? 4 : initialScenarios.length + 1);
   const isLastRound =
     gameState.currentRound >= maxRounds - 1;
 
@@ -194,6 +193,7 @@ export default function DeveloperPage({
     adminActions,
     info,
     gameState.currentRound,
+    gameState.isPracticeMode,
   ]);
 
   // 운영자 계정 목록 조회

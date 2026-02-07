@@ -32,11 +32,10 @@ import StockCard from '../components/StockCard';
 import TradeModal from '../components/TradeModal';
 import Toast from '../components/Toast';
 import {
-  STOCKS,
   initialScenarios,
-  PRACTICE_STOCKS,
   practiceScenarios,
 } from '../data/initialScenarios';
+import { getActiveStocks } from '../../shared/getActiveStocks';
 import {
   playCountdownSound,
   playRoundStartSound,
@@ -95,8 +94,6 @@ export default function PlayerPage() {
   const [activeTab, setActiveTab] = useState('info'); // 'info', 'portfolio', 'rank', 'news', 'hints'
   const [previousRoundAsset, setPreviousRoundAsset] =
     useState(INITIAL_CASH); // 이전 라운드 총 자산
-  const [previousRoundPrices, setPreviousRoundPrices] =
-    useState({}); // 이전 라운드 주식 가격
   const [hints, setHints] = useState([]); // 보유한 힌트 목록
   const [selectedStock, setSelectedStock] = useState(null); // 거래 모달용 선택된 주식
   const [currentRumor, setCurrentRumor] = useState(null); // 현재 찌라시
@@ -107,10 +104,8 @@ export default function PlayerPage() {
   const [tutorialStep, setTutorialStep] = useState(0); // 튜토리얼 단계
   const wasDisconnectedRef = useRef(false); // 재연결 감지용
 
-  // 현재 게임에서 사용 중인 주식 목록 (커스텀 주식 지원)
-  const activeStocks = (gameState.customStocks && gameState.customStocks.length > 0)
-    ? gameState.customStocks
-    : (gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS);
+  // 현재 게임에서 사용 중인 주식 목록 - 공유 유틸리티 사용
+  const activeStocks = getActiveStocks(gameState);
 
   // 거래 내역 탭이 활성화되면 자동으로 요청
   const hasRequestedTransactionsRef = useRef(false);
@@ -129,49 +124,54 @@ export default function PlayerPage() {
     if (activeTab !== 'transactions') {
       hasRequestedTransactionsRef.current = false;
     }
-  }, [activeTab, isLoggedIn]);
+  }, [activeTab, isLoggedIn, playerActions]);
 
   // localStorage에서 닉네임 및 포트폴리오 불러오기
   useEffect(() => {
-    const savedNickname = localStorage.getItem(
-      NICKNAME_STORAGE_KEY
-    );
-    if (savedNickname) {
-      setNickname(savedNickname);
+    try {
+      const savedNickname = localStorage.getItem(
+        NICKNAME_STORAGE_KEY
+      );
+      if (savedNickname) {
+        setNickname(savedNickname);
 
-      // 저장된 포트폴리오 불러오기 (오프라인 상태에서도 자산 표시)
-      const portfolioKey = `${STORAGE_KEY}_${savedNickname}`;
-      const savedPortfolio =
-        localStorage.getItem(portfolioKey);
-      if (savedPortfolio) {
-        try {
-          const parsedPortfolio =
-            JSON.parse(savedPortfolio);
-          setPortfolio(parsedPortfolio);
-          if (parsedPortfolio.totalAsset) {
-            setPreviousRoundAsset(
-              parsedPortfolio.totalAsset
+        // 저장된 포트폴리오 불러오기 (오프라인 상태에서도 자산 표시)
+        const portfolioKey = `${STORAGE_KEY}_${savedNickname}`;
+        const savedPortfolio =
+          localStorage.getItem(portfolioKey);
+        if (savedPortfolio) {
+          try {
+            const parsedPortfolio =
+              JSON.parse(savedPortfolio);
+            setPortfolio(parsedPortfolio);
+            if (parsedPortfolio.totalAsset) {
+              setPreviousRoundAsset(
+                parsedPortfolio.totalAsset
+              );
+            }
+          } catch (parseError) {
+            console.error(
+              '포트폴리오 데이터 파싱 오류:',
+              parseError
             );
           }
-        } catch (error) {
-          console.error(
-            '포트폴리오 데이터 파싱 오류:',
-            error
-          );
         }
-      }
 
-      // 저장된 힌트 불러오기 (오프라인 상태에서도 힌트 표시)
-      const hintsKey = `${STORAGE_KEY}_hints_${savedNickname}`;
-      const savedHints = localStorage.getItem(hintsKey);
-      if (savedHints) {
-        try {
-          const parsedHints = JSON.parse(savedHints);
-          setHints(parsedHints);
-        } catch (error) {
-          console.error('힌트 데이터 파싱 오류:', error);
+        // 저장된 힌트 불러오기 (오프라인 상태에서도 힌트 표시)
+        const hintsKey = `${STORAGE_KEY}_hints_${savedNickname}`;
+        const savedHints = localStorage.getItem(hintsKey);
+        if (savedHints) {
+          try {
+            const parsedHints = JSON.parse(savedHints);
+            setHints(parsedHints);
+          } catch (parseError) {
+            console.error('힌트 데이터 파싱 오류:', parseError);
+          }
         }
       }
+    } catch (storageError) {
+      // localStorage 접근 불가 (private browsing 등)
+      console.warn('localStorage 접근 불가:', storageError.message);
     }
   }, []);
 
@@ -487,7 +487,6 @@ export default function PlayerPage() {
             stock.basePrice;
         }
       });
-      setPreviousRoundPrices(currentPrices);
 
       setShowNewsModal(true);
 
@@ -720,11 +719,9 @@ export default function PlayerPage() {
     };
   }, [setMinigameSuccessCallback, success]);
 
-  // 총 자산은 서버에서 계산된 값 사용
-  const totalAsset =
-    portfolio.totalAsset ||
-    (portfolio.cash || 0) + (portfolio.bonusPoints || 0) ||
-    INITIAL_CASH;
+  // 총 자산은 서버에서 계산된 값 사용 (nullish coalescing으로 0 값 보존)
+  const computedAsset = portfolio.totalAsset ?? ((portfolio.cash ?? 0) + (portfolio.bonusPoints ?? 0));
+  const totalAsset = computedAsset || INITIAL_CASH;
 
   // 이전 라운드 대비 수익률 계산
   const assetChange = totalAsset - previousRoundAsset;

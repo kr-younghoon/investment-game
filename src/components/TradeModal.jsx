@@ -65,6 +65,9 @@ export default function TradeModal({
     setError('');
   };
 
+  // totalAmount를 handleConfirm보다 먼저 정의 (const hoisting 문제 방지)
+  const totalAmount = tradeQuantity ? price * parseInt(tradeQuantity) : 0;
+
   const handleConfirm = () => {
     const qty = parseInt(tradeQuantity);
     if (!tradeQuantity || qty <= 0) {
@@ -102,7 +105,6 @@ export default function TradeModal({
     onClose();
   };
 
-  const totalAmount = tradeQuantity ? price * parseInt(tradeQuantity) : 0;
   const afterCash = tradeType === 'buy' ? currentCash - totalAmount : currentCash + totalAmount;
   const canAfford = tradeType === 'buy' ? totalAmount <= currentCash : true;
   const hasEnough = tradeType === 'sell' ? parseInt(tradeQuantity) <= quantity : true;

@@ -56,9 +56,8 @@ export default function HintShopPage({
   const providerPrice =
     PROVIDER_HINT_PRICES?.[hintDifficulty] ?? 0;
 
-  const maxRounds = gameState.isPracticeMode
-    ? 4
-    : initialScenarios.length + 1;
+  const maxRounds = gameState.totalRounds
+    || (gameState.isPracticeMode ? 4 : initialScenarios.length + 1);
 
   const roundOptions = useMemo(() => {
     // 실제 게임 라운드 표기 기준(1~)의 힌트 등록 라운드: 2 ~ maxRounds-1

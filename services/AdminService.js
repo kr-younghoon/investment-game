@@ -1,3 +1,5 @@
+import bcrypt from 'bcryptjs';
+
 /**
  * AdminService - 관리자 계정 관리
  */
@@ -17,7 +19,11 @@ export class AdminService {
         return { success: false, error: '관리자 ID를 찾을 수 없습니다.' };
       }
 
-      if (admin.password !== password) {
+      // bcrypt 해시 비교 (평문 폴백: 마이그레이션 전 계정 대응)
+      const isMatch = admin.password.startsWith('$2')
+        ? bcrypt.compareSync(password, admin.password)
+        : admin.password === password;
+      if (!isMatch) {
         return { success: false, error: '비밀번호가 일치하지 않습니다.' };
       }
 
@@ -67,7 +73,8 @@ export class AdminService {
         return { success: false, error: '이미 존재하는 관리자 ID입니다.' };
       }
 
-      const result = this.db.createAdmin(adminId, password);
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      const result = this.db.createAdmin(adminId, hashedPassword);
       return {
         success: true,
         admin: {
@@ -90,7 +97,8 @@ export class AdminService {
     }
 
     try {
-      const result = this.db.updateAdminPassword(adminId, newPassword);
+      const hashedPassword = bcrypt.hashSync(newPassword, 10);
+      const result = this.db.updateAdminPassword(adminId, hashedPassword);
       if (result.changes > 0) {
         return { success: true };
       }

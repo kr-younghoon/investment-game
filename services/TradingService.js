@@ -8,6 +8,22 @@ export class TradingService {
     this.state = stateManager;
     this.db = dbHelpers;
     this.broadcast = broadcastService;
+    this._playerLocks = new Map(); // 플레이어별 거래 잠금
+  }
+
+  /**
+   * 플레이어별 거래 잠금 획득. 이미 잠겨있으면 false 반환.
+   */
+  _acquireLock(socketId) {
+    if (this._playerLocks.get(socketId)) {
+      return false;
+    }
+    this._playerLocks.set(socketId, true);
+    return true;
+  }
+
+  _releaseLock(socketId) {
+    this._playerLocks.delete(socketId);
   }
 
   /**
@@ -56,6 +72,17 @@ export class TradingService {
    * 주식 매수 실행
    */
   executeBuy(socketId, stockId, quantity) {
+    if (!this._acquireLock(socketId)) {
+      return { success: false, error: '이전 거래가 처리 중입니다. 잠시 후 다시 시도해주세요.' };
+    }
+    try {
+      return this._executeBuyInternal(socketId, stockId, quantity);
+    } finally {
+      this._releaseLock(socketId);
+    }
+  }
+
+  _executeBuyInternal(socketId, stockId, quantity) {
     const gameState = this.state.getGameState();
     const isPractice = gameState.isPracticeMode;
     const playerData = this.state.getPlayerData(socketId, isPractice);
@@ -149,6 +176,17 @@ export class TradingService {
    * 주식 매도 실행
    */
   executeSell(socketId, stockId, quantity) {
+    if (!this._acquireLock(socketId)) {
+      return { success: false, error: '이전 거래가 처리 중입니다. 잠시 후 다시 시도해주세요.' };
+    }
+    try {
+      return this._executeSellInternal(socketId, stockId, quantity);
+    } finally {
+      this._releaseLock(socketId);
+    }
+  }
+
+  _executeSellInternal(socketId, stockId, quantity) {
     const gameState = this.state.getGameState();
     const isPractice = gameState.isPracticeMode;
     const playerData = this.state.getPlayerData(socketId, isPractice);

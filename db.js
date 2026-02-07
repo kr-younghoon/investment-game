@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { randomUUID } from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -248,7 +249,9 @@ try {
 
 // 기본 운영자 계정 생성 (환경변수 우선, 없으면 기본값)
 const defaultAdminId = process.env.ADMIN_ID || 'admin';
+const isUsingDefaultPassword = !process.env.ADMIN_PASSWORD;
 const defaultPassword = process.env.ADMIN_PASSWORD || 'admin1234';
+
 const checkDefaultAdmin = db.prepare(
   'SELECT * FROM admins WHERE admin_id = ?'
 );
@@ -259,11 +262,21 @@ const insertDefaultAdmin = db.prepare(`
 
 const existingAdmin = checkDefaultAdmin.get(defaultAdminId);
 if (!existingAdmin) {
-  insertDefaultAdmin.run(defaultAdminId, defaultPassword);
-  console.log(
-    '기본 운영자 계정 생성 완료:',
-    defaultAdminId
-  );
+  const hashedPassword = bcrypt.hashSync(defaultPassword, 10);
+  insertDefaultAdmin.run(defaultAdminId, hashedPassword);
+  console.log('기본 운영자 계정 생성 완료:', defaultAdminId);
+
+  // 기본 비밀번호 사용 시 보안 경고
+  if (isUsingDefaultPassword) {
+    console.warn('⚠️  보안 경고: 기본 비밀번호를 사용 중입니다.');
+    console.warn('   프로덕션 환경에서는 환경변수를 설정하세요:');
+    console.warn('   ADMIN_ID=your_id ADMIN_PASSWORD=your_secure_password node server.js');
+  }
+} else if (existingAdmin.password && !existingAdmin.password.startsWith('$2')) {
+  // 기존 평문 비밀번호를 해싱으로 마이그레이션
+  const hashedPassword = bcrypt.hashSync(existingAdmin.password, 10);
+  db.prepare('UPDATE admins SET password = ? WHERE admin_id = ?').run(hashedPassword, defaultAdminId);
+  console.log('기존 운영자 비밀번호 해싱 마이그레이션 완료:', defaultAdminId);
 }
 
 // 게임 ID 생성 및 관리 함수

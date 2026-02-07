@@ -100,10 +100,14 @@ export function registerPlayerMgmtHandlers(socket, io, services) {
     // 모든 플레이어 소켓 연결 끊기
     const connectedPlayers = Array.from(stateManager.getConnectedPlayers());
     connectedPlayers.forEach((socketId) => {
-      const playerSocket = io.sockets.sockets.get(socketId);
-      if (playerSocket) {
-        playerSocket.emit('FORCE_DISCONNECT', { message: '관리자에 의해 모든 플레이어가 삭제되었습니다.' });
-        playerSocket.disconnect(true);
+      try {
+        const playerSocket = io.sockets.sockets.get(socketId);
+        if (playerSocket?.connected) {
+          playerSocket.emit('FORCE_DISCONNECT', { message: '관리자에 의해 모든 플레이어가 삭제되었습니다.' });
+          playerSocket.disconnect(true);
+        }
+      } catch (err) {
+        console.error(`[ADMIN_DELETE_ALL_PLAYERS] 소켓 연결 해제 오류 (${socketId}):`, err.message);
       }
     });
 

@@ -308,6 +308,8 @@ export class GameStateService {
       this.broadcast.persistGameState();
 
       if (this.state.getGameState().roundTimer === 0) {
+        // 타이머 종료 시 즉시 인터벌 정리
+        this.state.clearRoundTimerInterval();
         const timeMessage = gs.isPracticeMode
           ? '5분이 종료되었습니다.'
           : '15분이 종료되었습니다.';

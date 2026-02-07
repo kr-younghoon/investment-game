@@ -90,17 +90,14 @@ export function registerTradingControlHandlers(socket, io, services) {
     const playerData = stateManager.getPlayerData(socket.id, gameState.isPracticeMode);
     const nickname = playerData?.nickname || 'Unknown';
 
-    // 모든 관리자에게 알림
-    for (const adminSocketId of stateManager.adminSockets) {
-      const adminSocket = io.sockets.sockets.get(adminSocketId);
-      if (adminSocket) {
-        adminSocket.emit('PLAYER_MINIGAME_COMPLETE_NOTIFICATION', {
-          socketId: socket.id,
-          nickname,
-          timestamp: new Date().toISOString(),
-        });
-      }
-    }
+    // 모든 관리자에게 알림 (adminSockets는 socket 객체 Set)
+    stateManager.getAdminSockets().forEach((adminSocket) => {
+      adminSocket.emit('PLAYER_MINIGAME_COMPLETE_NOTIFICATION', {
+        socketId: socket.id,
+        nickname,
+        timestamp: new Date().toISOString(),
+      });
+    });
 
     console.log(`[PLAYER_MINIGAME_COMPLETE] ${nickname} 미니게임 완료 신호`);
   });

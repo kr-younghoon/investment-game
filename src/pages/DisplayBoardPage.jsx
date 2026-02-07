@@ -13,11 +13,10 @@ import {
 } from 'lucide-react';
 import { useSocketSync } from '../hooks/useSocketSync';
 import {
-  STOCKS,
-  PRACTICE_STOCKS,
   initialScenarios,
   practiceScenarios,
 } from '../data/initialScenarios';
+import { getActiveStocks } from '../../shared/getActiveStocks';
 import { playBuySound, playSellSound } from '../utils/sounds';
 
 // 주식 가격 변동률 계산 헬퍼
@@ -59,13 +58,11 @@ export default function DisplayBoardPage() {
   const isTransactionInitRef = useRef(false);
   const [flashingStocks, setFlashingStocks] = useState({});
 
-  // 활성 주식 목록 (커스텀 주식 지원)
-  const activeStocks = useMemo(() => {
-    if (gameState.customStocks && gameState.customStocks.length > 0) {
-      return gameState.customStocks;
-    }
-    return gameState.isPracticeMode ? PRACTICE_STOCKS : STOCKS;
-  }, [gameState.customStocks, gameState.isPracticeMode]);
+  // 활성 주식 목록 (커스텀 주식 지원) - 공유 유틸리티 사용
+  const activeStocks = useMemo(
+    () => getActiveStocks(gameState),
+    [gameState.customStocks, gameState.isPracticeMode]
+  );
 
   // 시나리오 목록 (총 라운드 수 계산용)
   const scenarios = useMemo(() => {
@@ -401,7 +398,7 @@ export default function DisplayBoardPage() {
 
                       return (
                         <motion.div
-                          key={`${t?.timestamp || 't'}-${idx}`}
+                          key={`${t?.timestamp || 't'}-${t?.nickname || 'n'}-${t?.stockId || 's'}-${idx}`}
                           initial={{ opacity: 0, x: -20, height: 0 }}
                           animate={{ opacity: 1, x: 0, height: 'auto' }}
                           transition={{ duration: 0.3 }}
