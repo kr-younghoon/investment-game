@@ -58,6 +58,9 @@ export default function GameStartModal({
           onClick={onClose}
         >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-start-modal-title"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
@@ -66,6 +69,7 @@ export default function GameStartModal({
           >
             <button
               onClick={onClose}
+              aria-label="닫기"
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
             >
               <X className="w-5 h-5" />
@@ -85,7 +89,7 @@ export default function GameStartModal({
                   <Rocket className="w-8 h-8 text-blue-600" />
                 )}
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
+              <h2 id="game-start-modal-title" className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
                 {isPractice
                   ? '연습 게임을 시작하시겠습니까?'
                   : '실제 게임을 시작하시겠습니까?'}

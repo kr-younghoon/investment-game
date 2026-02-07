@@ -44,8 +44,9 @@ export function registerHintHandlers(socket, io, services) {
     const gameState = stateManager.getGameState();
     const currentGameId = gameState.gameId || 'legacy';
 
-    // Provider 힌트 직렬화
-    const price = PROVIDER_HINT_PRICES?.[provider] ?? 0;
+    // Provider 힌트 직렬화 (가격 유효성 검증)
+    const rawPrice = PROVIDER_HINT_PRICES?.[provider] ?? 0;
+    const price = typeof rawPrice === 'number' && rawPrice >= 0 ? rawPrice : 0;
     const serializedHints = hints.map((content) =>
       hintService.serializeProviderHint(provider, content, price)
     );
@@ -101,8 +102,14 @@ export function registerHintHandlers(socket, io, services) {
       return;
     }
 
+    // count 값 검증 (1 이상, 힌트풀 크기 이하)
+    const validCount = Math.max(1, Math.min(
+      Number.isInteger(count) ? count : 3,
+      hintPool.length
+    ));
+
     // 랜덤 힌트 선택
-    const selectedHints = hintService.getRandomHints(hintPool, count);
+    const selectedHints = hintService.getRandomHints(hintPool, validCount);
 
     // 모든 플레이어에게 힌트 전송
     const connectedPlayers = stateManager.getConnectedPlayers();

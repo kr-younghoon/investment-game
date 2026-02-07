@@ -116,7 +116,9 @@ export class GameStateService {
     stockList.forEach((stock) => {
       const currentPrice =
         gameState.stockPrices[stock.id]?.[gameState.currentRound] || stock.basePrice;
-      const changeRate = (scenario.volatility[stock.id] || 0) / 100;
+      // volatility 객체 및 해당 종목 키 존재 여부 검증
+      const volatilityValue = scenario.volatility?.[stock.id];
+      const changeRate = (typeof volatilityValue === 'number' ? volatilityValue : 0) / 100;
       const newPrice = currentPrice * (1 + changeRate);
 
       if (!gameState.stockPrices[stock.id]) {

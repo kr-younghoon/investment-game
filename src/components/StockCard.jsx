@@ -55,21 +55,9 @@ const StockCard = React.memo(function StockCard({
           }`}
         >
           {isPositive ? (
-            <TrendingUp
-              className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                isPositive
-                  ? 'text-red-600'
-                  : 'text-blue-600'
-              }`}
-            />
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
           ) : (
-            <TrendingDown
-              className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                isPositive
-                  ? 'text-red-600'
-                  : 'text-blue-600'
-              }`}
-            />
+            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
           )}
         </div>
       </div>

@@ -30,19 +30,17 @@ export default function NewsTicker({ headline, newsBriefing }) {
           },
         }}
       >
-        <div className="text-yellow-700 text-xs sm:text-sm font-bold mr-2 sm:mr-4 whitespace-nowrap px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-yellow-100">
-          📰 BREAKING
-        </div>
-        <div className="text-gray-900 text-sm sm:text-base md:text-lg font-semibold whitespace-nowrap">
-          {newsItems}
-        </div>
-        {/* 반복을 위한 복사본 */}
-        <div className="text-yellow-700 text-xs sm:text-sm font-bold mr-2 sm:mr-4 ml-4 sm:ml-8 whitespace-nowrap px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-yellow-100">
-          📰 BREAKING
-        </div>
-        <div className="text-gray-900 text-sm sm:text-base md:text-lg font-semibold whitespace-nowrap">
-          {newsItems}
-        </div>
+        {/* 무한 스크롤을 위한 2회 반복 */}
+        {[0, 1].map((i) => (
+          <div key={i} className={`flex items-center ${i === 1 ? 'ml-4 sm:ml-8' : ''}`}>
+            <div className="text-yellow-700 text-xs sm:text-sm font-bold mr-2 sm:mr-4 whitespace-nowrap px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-yellow-100">
+              📰 BREAKING
+            </div>
+            <div className="text-gray-900 text-sm sm:text-base md:text-lg font-semibold whitespace-nowrap">
+              {newsItems}
+            </div>
+          </div>
+        ))}
       </motion.div>
     </div>
   );

@@ -15,11 +15,13 @@ export function registerRoundHandlers(socket, io, services) {
       return;
     }
 
+    // 라운드 진행 전 모든 타이머 정리 (상호배제)
+    stateManager.clearCountdownInterval();
+    stateManager.clearRoundTimerInterval();
+
     // 카운트다운 시작 (3초)
     stateManager.updateGameState({ countdown: 3 });
     io.emit('ROUND_COUNTDOWN', { countdown: 3 });
-
-    stateManager.clearCountdownInterval();
 
     const countdownInterval = setInterval(() => {
       const gs = stateManager.getGameState();

@@ -11,8 +11,8 @@ export function registerRewardHandlers(socket, io, services) {
     const { socketId, points, source = 'BONUS' } = data;
     const gameState = stateManager.getGameState();
 
-    if (!points || points <= 0) {
-      socket.emit('POINTS_ERROR', { message: '포인트를 확인해주세요.' });
+    if (!points || !Number.isInteger(points) || points <= 0) {
+      socket.emit('POINTS_ERROR', { message: '포인트는 양의 정수여야 합니다.' });
       return;
     }
 
@@ -49,8 +49,8 @@ export function registerRewardHandlers(socket, io, services) {
     const { points, source = 'BONUS' } = data;
     const gameState = stateManager.getGameState();
 
-    if (!points || points <= 0) {
-      socket.emit('POINTS_ERROR', { message: '포인트를 확인해주세요.' });
+    if (!points || !Number.isInteger(points) || points <= 0) {
+      socket.emit('POINTS_ERROR', { message: '포인트는 양의 정수여야 합니다.' });
       return;
     }
 

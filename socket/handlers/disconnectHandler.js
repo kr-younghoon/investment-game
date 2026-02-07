@@ -17,6 +17,13 @@ export function registerDisconnectHandlers(socket, io, services) {
       stateManager.removeAdminSocket(socket);
       console.log(`[disconnect] 관리자 연결 종료: ${adminId}`);
 
+      // 마지막 관리자가 연결 해제되면 타이머 정리
+      if (stateManager.getAdminSockets().size === 0) {
+        stateManager.clearCountdownInterval();
+        stateManager.clearRoundTimerInterval();
+        console.log('[disconnect] 마지막 관리자 연결 해제 - 타이머 정리');
+      }
+
       // 다른 관리자들에게 목록 업데이트
       broadcastService.broadcastPlayerList();
     }

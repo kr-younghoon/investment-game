@@ -19,9 +19,12 @@ export class RewardService {
       return { success: false, error: '플레이어를 찾을 수 없습니다.' };
     }
 
-    // bonusPoints가 있으면 cash에 통합
-    if (playerData.bonusPoints && playerData.bonusPoints > 0) {
-      playerData.cash += playerData.bonusPoints;
+    // bonusPoints가 있으면 cash에 통합 (음수 값 초기화)
+    if (playerData.bonusPoints) {
+      if (playerData.bonusPoints > 0) {
+        playerData.cash += playerData.bonusPoints;
+      }
+      // 음수든 양수든 사용 후 초기화
       playerData.bonusPoints = 0;
     }
 

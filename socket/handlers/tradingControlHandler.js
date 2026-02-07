@@ -17,9 +17,14 @@ export function registerTradingControlHandlers(socket, io, services) {
       return;
     }
 
+    // 보상금 유효성 검증 (null 또는 양수만 허용)
+    const validRewardAmount = (rewardAmount && typeof rewardAmount === 'number' && rewardAmount > 0)
+      ? rewardAmount
+      : null;
+
     stateManager.setPlayerTradingBlocked(socketId, {
       isBlocked: true,
-      rewardAmount: rewardAmount || null,
+      rewardAmount: validRewardAmount,
       message: message || null,
     });
 

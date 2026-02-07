@@ -11,6 +11,7 @@
     "check-db": "node check-db.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^9.6.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
