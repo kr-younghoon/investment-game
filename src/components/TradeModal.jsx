@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, X } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export default function TradeModal({
   isOpen,
@@ -18,13 +18,20 @@ export default function TradeModal({
   const [tradeQuantity, setTradeQuantity] = useState('');
   const [error, setError] = useState('');
 
+  // ESC 키로 모달 닫기
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+
   useEffect(() => {
     if (isOpen) {
       setTradeQuantity('');
       setError('');
       setTradeType('buy');
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen]);
+  }, [isOpen, handleKeyDown]);
 
   const handleQuantityChange = (value) => {
     setError('');
@@ -122,6 +129,9 @@ export default function TradeModal({
           onClick={onClose}
         >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trade-modal-title"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
@@ -130,13 +140,14 @@ export default function TradeModal({
           >
             <button
               onClick={onClose}
+              aria-label="닫기"
               className="absolute top-3 right-3 text-gray-600 hover:text-gray-900 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">{stock.name}</h2>
+              <h2 id="trade-modal-title" className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">{stock.name}</h2>
               <div className="text-sm text-gray-600">현재가: ₩{price % 1 === 0 ? price.toLocaleString('ko-KR') : price.toFixed(2).replace(/\.0+$/, '')}</div>
               {quantity > 0 && (
                 <div className="text-sm text-gray-600">보유: {quantity}주</div>

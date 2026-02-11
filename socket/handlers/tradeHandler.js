@@ -80,9 +80,6 @@ export function registerTradeHandlers(socket, io, services) {
     broadcastService.broadcastPlayerList();
     broadcastService.broadcastGameState();
 
-    const stock = getActiveStocks().find(
-      (s) => s.id === stockId
-    );
     console.log(
       `[PLAYER_BUY_STOCK] ${result.transaction.nickname} - ${stock?.name || stockId} ${quantity}주 매수`
     );
@@ -159,9 +156,6 @@ export function registerTradeHandlers(socket, io, services) {
     broadcastService.broadcastPlayerList();
     broadcastService.broadcastGameState();
 
-    const stock = getActiveStocks().find(
-      (s) => s.id === stockId
-    );
     console.log(
       `[PLAYER_SELL_STOCK] ${result.transaction.nickname} - ${stock?.name || stockId} ${quantity}주 매도`
     );
@@ -219,9 +213,6 @@ export function registerTradeHandlers(socket, io, services) {
     if (playerSocket) {
       playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', result.portfolio);
 
-      const stock = getActiveStocks().find(
-        (s) => s.id === stockId
-      );
       playerSocket.emit('TRADE_EXECUTED', {
         type,
         stockName: stock?.name || stockId,

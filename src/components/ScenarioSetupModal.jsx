@@ -64,12 +64,19 @@ export default function ScenarioSetupModal({
   const isPractice = type === 'practice';
   const defaultRoundCount = isPractice ? 3 : 6;
 
-  // 모달이 열릴 때 시나리오 목록 불러오기
+  // 모달이 열릴 때 상태 초기화 및 시나리오 목록 불러오기
   useEffect(() => {
-    if (isOpen && adminActions) {
-      loadScenarios();
+    if (isOpen) {
+      setStep('list');
+      setSelectedScenario(null);
+      setConfirmDelete(false);
+      setActiveRound(0);
+      setActiveTab('news');
+      if (adminActions) {
+        loadScenarios();
+      }
     }
-  }, [isOpen, adminActions]);
+  }, [isOpen]);
 
   // 시나리오 목록 불러오기
   const loadScenarios = () => {

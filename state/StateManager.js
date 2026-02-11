@@ -52,8 +52,9 @@ class StateManager {
     // 플레이어별 투자 차단 상태
     this.playerTradingBlocked = new Map();
 
-    // 거래 로그
+    // 거래 로그 (메모리 제한: 최대 1000개)
     this.transactionLogs = [];
+    this.MAX_TRANSACTION_LOGS = 1000;
 
     // 타이머 인터벌
     this.countdownInterval = null;
@@ -191,6 +192,10 @@ class StateManager {
 
   addTransactionLog(log) {
     this.transactionLogs.push(log);
+    // 메모리 제한: 최대 개수 초과 시 오래된 로그 제거
+    if (this.transactionLogs.length > this.MAX_TRANSACTION_LOGS) {
+      this.transactionLogs.shift();
+    }
   }
 
   clearTransactionLogs() {

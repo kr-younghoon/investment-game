@@ -362,6 +362,18 @@ export class GameStateService {
     const newGameId = createGameId();
     this.db.createGame(newGameId, isPractice);
 
+    const INITIAL_CASH = this.state.INITIAL_CASH;
+    const connectedPlayers = this.state.getConnectedPlayers();
+
+    // 접속 중인 플레이어 닉네임 저장 (삭제 전에 저장해야 함)
+    const connectedPlayerNicknames = new Map();
+    const sourceDataMap = isPractice ? this.state.practicePlayersData : this.state.playersData;
+    sourceDataMap.forEach((playerData, socketId) => {
+      if (connectedPlayers.has(socketId) && playerData.nickname) {
+        connectedPlayerNicknames.set(socketId, playerData.nickname);
+      }
+    });
+
     // 이전 데이터 삭제 옵션
     if (shouldDelete) {
       // PlayerService가 services에 없으므로 dbHelpers를 직접 사용
@@ -400,112 +412,59 @@ export class GameStateService {
     });
     this.state.updateGameState({ stockPrices });
 
-    // 기존 플레이어 데이터 처리
-    const INITIAL_CASH = this.state.INITIAL_CASH;
-    const connectedPlayers = this.state.getConnectedPlayers();
+    // 접속 중인 플레이어 데이터 재생성
+    const targetDataMap = isPractice ? this.state.practicePlayersData : this.state.playersData;
 
-    if (isPractice) {
-      // 연습 모드: 실제 플레이어 데이터에서 마이그레이션
-      const realPlayersData = this.state.playersData;
-      realPlayersData.forEach((playerData, socketId) => {
-        if (connectedPlayers.has(socketId)) {
-          const newPlayerData = {
-            nickname: playerData.nickname,
+    connectedPlayerNicknames.forEach((nickname, socketId) => {
+      const stocks = {};
+      customStocks.forEach((stock) => {
+        stocks[stock.id] = 0;
+      });
+
+      const newPlayerData = {
+        nickname,
+        cash: INITIAL_CASH,
+        stocks,
+        bonusPoints: 0,
+        totalAsset: INITIAL_CASH,
+        transactions: [],
+        hints: [],
+        dbId: null,
+      };
+
+      // DB 저장
+      try {
+        const savedPlayer = this.db.savePlayer(
+          newGameId,
+          socketId,
+          nickname,
+          INITIAL_CASH,
+          0,
+          INITIAL_CASH,
+          isPractice
+        );
+        newPlayerData.dbId = savedPlayer?.id || null;
+      } catch (error) {
+        console.error(`[startGameWithScenario] 플레이어 저장 오류: ${error.message}`);
+      }
+
+      targetDataMap.set(socketId, newPlayerData);
+
+      // 플레이어에게 포트폴리오 전송
+      if (this.io) {
+        const playerSocket = this.io.sockets.sockets.get(socketId);
+        if (playerSocket) {
+          playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
             cash: INITIAL_CASH,
-            stocks: {},
+            stocks,
             bonusPoints: 0,
             totalAsset: INITIAL_CASH,
-            transactions: [],
-            hints: [],
-            dbId: null,
-          };
-
-          customStocks.forEach((stock) => {
-            newPlayerData.stocks[stock.id] = 0;
           });
-
-          // DB 저장
-          try {
-            const savedPlayer = this.db.savePlayer(
-              newGameId,
-              socketId,
-              newPlayerData.nickname,
-              INITIAL_CASH,
-              0,
-              INITIAL_CASH,
-              true
-            );
-            newPlayerData.dbId = savedPlayer?.id || null;
-          } catch (error) {
-            console.error(`[startGameWithScenario] 플레이어 저장 오류: ${error.message}`);
-            newPlayerData.dbId = null;
-          }
-
-          this.state.practicePlayersData.set(socketId, newPlayerData);
-
-          // 플레이어에게 포트폴리오 전송
-          if (this.io) {
-            const playerSocket = this.io.sockets.sockets.get(socketId);
-            if (playerSocket) {
-              playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-                cash: INITIAL_CASH,
-                stocks: newPlayerData.stocks,
-                bonusPoints: 0,
-                totalAsset: INITIAL_CASH,
-              });
-            }
-          }
         }
-      });
-    } else {
-      // 실제 게임 모드: 기존 플레이어 데이터 초기화
-      const playersData = this.state.playersData;
-      connectedPlayers.forEach((socketId) => {
-        const playerData = playersData.get(socketId);
-        if (playerData) {
-          playerData.cash = INITIAL_CASH;
-          playerData.bonusPoints = 0;
-          playerData.totalAsset = INITIAL_CASH;
-          playerData.transactions = [];
-          playerData.hints = [];
+      }
 
-          // 이전 주식 데이터 완전 초기화 후 새 주식으로 교체
-          playerData.stocks = {};
-          customStocks.forEach((stock) => {
-            playerData.stocks[stock.id] = 0;
-          });
-
-          // DB 저장
-          try {
-            const savedPlayer = this.db.savePlayer(
-              newGameId,
-              socketId,
-              playerData.nickname,
-              INITIAL_CASH,
-              0,
-              INITIAL_CASH,
-              false
-            );
-            playerData.dbId = savedPlayer?.id || null;
-          } catch (error) {
-            console.error(`[startGameWithScenario] 플레이어 저장 오류: ${error.message}`);
-          }
-
-          // 플레이어에게 포트폴리오 전송
-          if (this.io) {
-            const playerSocket = this.io.sockets.sockets.get(socketId);
-            if (playerSocket) {
-              playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-                cash: INITIAL_CASH,
-                stocks: playerData.stocks,
-                bonusPoints: 0,
-                totalAsset: INITIAL_CASH,
-              });
-            }
-          }
-        }
-      });
-    }
+      console.log(`[startGameWithScenario] 플레이어 재생성: ${nickname} (socketId: ${socketId})`);
+    });
 
     // 브로드캐스트
     this.broadcast.broadcastGameState();

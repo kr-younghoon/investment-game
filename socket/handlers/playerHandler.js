@@ -57,6 +57,13 @@ export function registerPlayerHandlers(socket, io, services) {
       return;
     }
 
+    // XSS 방지: 허용되는 문자만 사용 (한글, 영문, 숫자, 공백, 언더스코어, 하이픈)
+    const nicknamePattern = /^[a-zA-Z0-9가-힣\s_-]+$/;
+    if (!nicknamePattern.test(trimmedNickname)) {
+      socket.emit('NICKNAME_ERROR', { message: '닉네임에 허용되지 않는 문자가 포함되어 있습니다.' });
+      return;
+    }
+
     // 닉네임 중복 체크
     const duplicateCheck = playerService.isNicknameDuplicate(trimmedNickname, socket.id);
     if (duplicateCheck.isDuplicate) {

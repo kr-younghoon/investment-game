@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, X } from 'lucide-react';
+import { useEffect, useCallback } from 'react';
 
 export default function ConfirmModal({
   isOpen,
@@ -11,6 +12,18 @@ export default function ConfirmModal({
   cancelText = '취소',
   type = 'default', // 'default', 'warning', 'danger'
 }) {
+  // ESC 키로 모달 닫기
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, handleKeyDown]);
+
   if (!isOpen) return null;
 
   const typeStyles = {
@@ -44,6 +57,9 @@ export default function ConfirmModal({
           onClick={onClose}
         >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-modal-title"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
@@ -52,6 +68,7 @@ export default function ConfirmModal({
           >
             <button
               onClick={onClose}
+              aria-label="닫기"
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors p-1.5 hover:bg-gray-100 rounded-lg"
             >
               <X className="w-5 h-5" />
@@ -61,7 +78,7 @@ export default function ConfirmModal({
               <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${styles.iconBg}`}>
                 <AlertCircle className={`w-8 h-8 ${styles.iconColor}`} />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
+              <h2 id="confirm-modal-title" className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
                 {title}
               </h2>
               <p className="text-sm sm:text-base text-gray-600">

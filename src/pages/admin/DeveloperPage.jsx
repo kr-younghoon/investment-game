@@ -3023,6 +3023,7 @@ export default function DeveloperPage({
         }}
         type={scenarioSetupModal?.type || 'practice'}
         socket={socket}
+        adminActions={adminActions}
         gameState={gameState}
         playerCount={playerCount}
       />

@@ -76,7 +76,6 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
     totalRounds: 12,
   });
   const socketRef = useRef(null);
-  const isInitializedRef = useRef(false);
   const bonusPointsCallbackRef = useRef(null); // 보너스 포인트 추가 콜백
   const transactionErrorCallbackRef = useRef(null); // 거래 오류 콜백
   const hintsUpdateCallbackRef = useRef(null); // 힌트 업데이트 콜백
@@ -91,19 +90,10 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
   const rumorUpdateCallbackRef = useRef(null); // 찌라시 업데이트 콜백
 
   useEffect(() => {
-    // 이미 초기화되었으면 스킵 (React StrictMode 대응)
-    if (isInitializedRef.current && socketRef.current) {
-      // 이미 연결되어 있으면 상태 업데이트
-      if (socketRef.current.connected) {
-        setConnected(true);
-      }
-      return;
-    }
-
-    // Socket 연결
+    // Socket 연결 - 아직 생성되지 않았으면 생성
     if (!socketRef.current) {
       console.log(
-        `[useSocketSync] Socket 연결 시도: ${SOCKET_URL} (관리자: ${isAdmin}, 전광판: ${isDisplay})`
+        `[useSocketSync] Socket 생성: ${SOCKET_URL} (관리자: ${isAdmin}, 전광판: ${isDisplay})`
       );
       socketRef.current = io(SOCKET_URL, {
         transports: ['websocket', 'polling'],
@@ -116,19 +106,29 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
         forceNew: false, // 기존 연결 재사용
         upgrade: true, // HTTP long-polling에서 WebSocket으로 업그레이드 허용
       });
-      isInitializedRef.current = true;
     }
 
     const socket = socketRef.current;
+
+    console.log('[useSocketSync] Socket 객체 상태:', {
+      exists: !!socket,
+      connected: socket?.connected,
+      id: socket?.id,
+    });
 
     // 이미 연결되어 있으면 상태 업데이트
     if (socket.connected) {
       setConnected(true);
       console.log('[useSocketSync] Socket 이미 연결됨');
+    } else {
+      // 연결되어 있지 않으면 수동으로 연결 시도
+      console.log('[useSocketSync] Socket 수동 연결 시도...');
+      socket.connect();
     }
 
     // 이벤트 리스너 등록 (중복 방지를 위해 기존 리스너 제거 후 등록)
     const handleConnect = () => {
+      console.log('[useSocketSync] handleConnect 호출됨, socket.id:', socket.id);
       setConnected(true);
       console.log('[useSocketSync] Socket 연결됨');
 
@@ -136,6 +136,13 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
       if (!isAdmin) {
         // 플레이어는 연결 시 게임 상태 요청
         socket.emit('PLAYER_REQUEST_STATE');
+
+        // 저장된 닉네임으로 자동 재접속 (페이지 새로고침 시에도 동작)
+        const savedNickname = localStorage.getItem('mz_investment_nickname');
+        if (savedNickname) {
+          console.log('[useSocketSync] 저장된 닉네임으로 자동 참가:', savedNickname);
+          socket.emit('PLAYER_JOIN', savedNickname);
+        }
       }
       // 전광판은 거래 로그를 구독
       if (isDisplay) {
@@ -167,6 +174,8 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
+
+    console.log('[useSocketSync] 이벤트 리스너 등록 완료, 현재 연결 상태:', socket.connected);
 
     const handleReconnect = (attemptNumber) => {
       setConnected(true);

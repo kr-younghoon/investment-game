@@ -40,6 +40,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('dist'));
 
+// Health check 엔드포인트 (모니터링, 로드밸런서용)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 // 서비스 초기화 (의존성 주입)
 const services = createServices(io);
 

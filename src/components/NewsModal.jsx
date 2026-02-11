@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
+import { useEffect, useCallback } from 'react';
 
 export default function NewsModal({
   isOpen,
@@ -11,6 +12,18 @@ export default function NewsModal({
   isLastRound = false,
   onNext,
 }) {
+  // ESC 키로 모달 닫기
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, handleKeyDown]);
+
   // newsBriefing이 배열이고 항목이 있으면 브리핑 모드, 아니면 기존 단일 헤드라인 모드
   const hasBriefing = Array.isArray(newsBriefing) && newsBriefing.length > 0;
 
@@ -53,6 +66,9 @@ export default function NewsModal({
             onClick={onClose}
           >
             <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="news-modal-title"
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.8, opacity: 0 }}
@@ -61,6 +77,7 @@ export default function NewsModal({
             >
               <button
                 onClick={onClose}
+                aria-label="닫기"
                 className="absolute top-2 right-2 sm:top-4 sm:right-4 text-gray-600 hover:text-yellow-600 transition-colors p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg z-10"
               >
                 <X className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -75,6 +92,7 @@ export default function NewsModal({
                   BREAKING NEWS
                 </motion.div>
                 <motion.h2
+                  id="news-modal-title"
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.2 }}

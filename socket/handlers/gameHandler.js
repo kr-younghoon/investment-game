@@ -17,9 +17,19 @@ export function registerGameHandlers(socket, io, services) {
     if (!stateManager.isAdmin(socket)) return;
 
     const { shouldDeleteOldData = false } = data;
-    const gameState = stateManager.getGameState();
 
     console.log('[ADMIN_START_PRACTICE] 연습 게임 시작');
+
+    const INITIAL_CASH = stateManager.INITIAL_CASH;
+
+    // 접속 중인 플레이어 닉네임 저장 (삭제 전에 저장해야 함)
+    const connectedPlayerNicknames = new Map();
+    const connectedPlayers = stateManager.getConnectedPlayers();
+    stateManager.playersData.forEach((playerData, socketId) => {
+      if (connectedPlayers.has(socketId) && playerData.nickname) {
+        connectedPlayerNicknames.set(socketId, playerData.nickname);
+      }
+    });
 
     // 새 게임 ID 생성
     const newGameId = createGameId();
@@ -58,60 +68,57 @@ export function registerGameHandlers(socket, io, services) {
     // 이전 연습 데이터 초기화 (stale 데이터 방지)
     stateManager.practicePlayersData.clear();
 
-    // 기존 플레이어 데이터 마이그레이션 (실제 -> 연습)
-    const realPlayersData = stateManager.playersData;
-    const practicePlayersData = stateManager.practicePlayersData;
-    const connectedPlayers = stateManager.getConnectedPlayers();
-    const INITIAL_CASH = stateManager.INITIAL_CASH;
+    // 접속 중인 플레이어 데이터 재생성
+    connectedPlayerNicknames.forEach((nickname, socketId) => {
+      // connectedPlayers에 다시 추가
+      stateManager.addConnectedPlayer(socketId);
 
-    realPlayersData.forEach((playerData, socketId) => {
-      if (connectedPlayers.has(socketId)) {
-        // 플레이어 데이터 초기화
-        const newPlayerData = {
-          nickname: playerData.nickname,
+      const newPlayerData = {
+        nickname,
+        cash: INITIAL_CASH,
+        stocks: {},
+        bonusPoints: 0,
+        totalAsset: INITIAL_CASH,
+        transactions: [],
+        hints: [],
+        dbId: null,
+      };
+
+      PRACTICE_STOCKS.forEach((stock) => {
+        newPlayerData.stocks[stock.id] = 0;
+      });
+
+      // DB 저장
+      try {
+        const savedPlayer = dbHelpers.savePlayer(
+          newGameId,
+          socketId,
+          nickname,
+          INITIAL_CASH,
+          0,
+          INITIAL_CASH,
+          true
+        );
+        newPlayerData.dbId = savedPlayer?.id || null;
+      } catch (error) {
+        console.error(`[ADMIN_START_PRACTICE] 플레이어 저장 오류: ${error.message}`);
+        newPlayerData.dbId = null;
+      }
+
+      stateManager.practicePlayersData.set(socketId, newPlayerData);
+
+      // 플레이어에게 포트폴리오 전송
+      const playerSocket = io.sockets.sockets.get(socketId);
+      if (playerSocket) {
+        playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
           cash: INITIAL_CASH,
-          stocks: {},
+          stocks: newPlayerData.stocks,
           bonusPoints: 0,
           totalAsset: INITIAL_CASH,
-          transactions: [],
-          hints: [],
-          dbId: null,
-        };
-
-        PRACTICE_STOCKS.forEach((stock) => {
-          newPlayerData.stocks[stock.id] = 0;
         });
-
-        // DB 저장
-        try {
-          const savedPlayer = dbHelpers.savePlayer(
-            newGameId,
-            socketId,
-            newPlayerData.nickname,
-            INITIAL_CASH,
-            0,
-            INITIAL_CASH,
-            true
-          );
-          newPlayerData.dbId = savedPlayer?.id || null;
-        } catch (error) {
-          console.error(`[ADMIN_START_PRACTICE] 플레이어 저장 오류: ${error.message}`);
-          newPlayerData.dbId = null;
-        }
-
-        practicePlayersData.set(socketId, newPlayerData);
-
-        // 플레이어에게 포트폴리오 전송
-        const playerSocket = io.sockets.sockets.get(socketId);
-        if (playerSocket) {
-          playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-            cash: INITIAL_CASH,
-            stocks: newPlayerData.stocks,
-            bonusPoints: 0,
-            totalAsset: INITIAL_CASH,
-          });
-        }
       }
+
+      console.log(`[ADMIN_START_PRACTICE] 플레이어 재생성: ${nickname}`);
     });
 
     // Provider 힌트 풀 초기화
@@ -132,6 +139,17 @@ export function registerGameHandlers(socket, io, services) {
     const { shouldDeleteOldData = false } = data;
 
     console.log('[ADMIN_START_REAL_GAME] 실제 게임 시작');
+
+    const INITIAL_CASH = stateManager.INITIAL_CASH;
+
+    // 접속 중인 플레이어 닉네임 저장 (삭제 전에 저장해야 함)
+    const connectedPlayerNicknames = new Map();
+    const connectedPlayers = stateManager.getConnectedPlayers();
+    stateManager.playersData.forEach((playerData, socketId) => {
+      if (connectedPlayers.has(socketId) && playerData.nickname) {
+        connectedPlayerNicknames.set(socketId, playerData.nickname);
+      }
+    });
 
     // 새 게임 ID 생성
     const newGameId = createGameId();
@@ -170,41 +188,57 @@ export function registerGameHandlers(socket, io, services) {
     // 연습 모드 데이터 정리 (모드 전환 시 stale 데이터 방지)
     stateManager.practicePlayersData.clear();
 
-    // 기존 플레이어 데이터 초기화
-    const playersData = stateManager.playersData;
-    const connectedPlayers = stateManager.getConnectedPlayers();
-    const INITIAL_CASH = stateManager.INITIAL_CASH;
+    // 접속 중인 플레이어 데이터 재생성
+    connectedPlayerNicknames.forEach((nickname, socketId) => {
+      // connectedPlayers에 다시 추가
+      stateManager.addConnectedPlayer(socketId);
 
-    connectedPlayers.forEach((socketId) => {
-      const playerData = playersData.get(socketId);
-      if (playerData) {
-        // 플레이어 데이터 초기화
-        playerData.cash = INITIAL_CASH;
-        playerData.bonusPoints = 0;
-        playerData.totalAsset = INITIAL_CASH;
-        playerData.transactions = [];
-        playerData.hints = [];
+      const stocks = {};
+      STOCKS.forEach((stock) => {
+        stocks[stock.id] = 0;
+      });
 
-        // 이전 주식 데이터 완전 초기화 후 새 주식으로 교체
-        playerData.stocks = {};
-        STOCKS.forEach((stock) => {
-          playerData.stocks[stock.id] = 0;
-        });
+      const newPlayerData = {
+        nickname,
+        cash: INITIAL_CASH,
+        stocks,
+        bonusPoints: 0,
+        totalAsset: INITIAL_CASH,
+        transactions: [],
+        hints: [],
+        dbId: null,
+      };
 
-        // DB 저장
-        playerService.resetPlayerDbForNewGame(socketId, playerData, false);
-
-        // 플레이어에게 포트폴리오 전송
-        const playerSocket = io.sockets.sockets.get(socketId);
-        if (playerSocket) {
-          playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
-            cash: INITIAL_CASH,
-            stocks: playerData.stocks,
-            bonusPoints: 0,
-            totalAsset: INITIAL_CASH,
-          });
-        }
+      // DB 저장
+      try {
+        const savedPlayer = dbHelpers.savePlayer(
+          newGameId,
+          socketId,
+          nickname,
+          INITIAL_CASH,
+          0,
+          INITIAL_CASH,
+          false
+        );
+        newPlayerData.dbId = savedPlayer?.id || null;
+      } catch (error) {
+        console.error(`[ADMIN_START_REAL_GAME] 플레이어 저장 오류: ${error.message}`);
       }
+
+      stateManager.playersData.set(socketId, newPlayerData);
+
+      // 플레이어에게 포트폴리오 전송
+      const playerSocket = io.sockets.sockets.get(socketId);
+      if (playerSocket) {
+        playerSocket.emit('PLAYER_PORTFOLIO_UPDATE', {
+          cash: INITIAL_CASH,
+          stocks,
+          bonusPoints: 0,
+          totalAsset: INITIAL_CASH,
+        });
+      }
+
+      console.log(`[ADMIN_START_REAL_GAME] 플레이어 재생성: ${nickname}`);
     });
 
     // Provider 힌트 풀 초기화
