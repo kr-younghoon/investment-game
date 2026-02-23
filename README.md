@@ -8,6 +8,14 @@
 
 ![플레이어 로그인](docs/screenshots/player-login.png)
 
+### 플레이어 화면 — 게임 진행 중 (종목 시세 · 수익률 · 뉴스 티커)
+
+![플레이어 게임 중](docs/screenshots/player-game-stocks.png)
+
+### 플레이어 화면 — 라운드 진행 시 BREAKING NEWS 모달
+
+![뉴스 모달](docs/screenshots/player-news-modal.png)
+
 ### 관리자 대시보드 — 게임 제어 및 종목 현황
 
 ![관리자 대시보드](docs/screenshots/admin-dashboard.png)
@@ -16,9 +24,9 @@
 
 ![시나리오 선택](docs/screenshots/admin-game-started.png)
 
-### 4K 전광판 — 실시간 시세, 거래 현황, 순위
+### 4K 전광판 — 게임 진행 중 실시간 시세 · 거래 · 뉴스 · 순위
 
-![전광판](docs/screenshots/display-board.png)
+![전광판 게임 중](docs/screenshots/display-game-running.png)
 
 ---
 
