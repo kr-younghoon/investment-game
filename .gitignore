@@ -28,3 +28,6 @@ game_data.db*
 
 # Environment
 .env
+
+# MCP config
+.mcp.json
