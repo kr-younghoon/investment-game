@@ -23,14 +23,20 @@ export default function TradeModal({
     if (e.key === 'Escape') onClose();
   }, [onClose]);
 
+  // 모달이 열릴 때만 상태 초기화 (handleKeyDown 의존성 제거로 불필요한 재실행 방지)
   useEffect(() => {
     if (isOpen) {
       setTradeQuantity('');
       setError('');
       setTradeType('buy');
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
     }
+  }, [isOpen]);
+
+  // ESC 키 이벤트 리스너 (상태 초기화와 분리)
+  useEffect(() => {
+    if (!isOpen) return;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleKeyDown]);
 
   const handleQuantityChange = (value) => {
