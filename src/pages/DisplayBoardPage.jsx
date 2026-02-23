@@ -12,10 +12,6 @@ import {
   Minus,
 } from 'lucide-react';
 import { useSocketSync } from '../hooks/useSocketSync';
-import {
-  initialScenarios,
-  practiceScenarios,
-} from '../data/initialScenarios';
 import { getActiveStocks } from '../../shared/getActiveStocks';
 import { playBuySound, playSellSound } from '../utils/sounds';
 
@@ -63,11 +59,6 @@ export default function DisplayBoardPage() {
     () => getActiveStocks(gameState),
     [gameState.customStocks, gameState.isPracticeMode]
   );
-
-  // 시나리오 목록 (총 라운드 수 계산용)
-  const scenarios = useMemo(() => {
-    return gameState.isPracticeMode ? practiceScenarios : initialScenarios;
-  }, [gameState.isPracticeMode]);
 
   // 현재 시간 업데이트
   useEffect(() => {
@@ -217,7 +208,7 @@ export default function DisplayBoardPage() {
                   transition={{ duration: 0.4 }}
                   className="font-bold text-white/80"
                 >
-                  ROUND {gameState.currentRound + 1} / {scenarios.length}
+                  ROUND {gameState.currentRound + 1} / {gameState.totalRounds}
                 </motion.span>
                 {gameState.isPracticeMode && (
                   <span className="px-3 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-lg font-semibold text-sm border border-yellow-500/30">
