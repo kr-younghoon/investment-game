@@ -23,7 +23,7 @@ const io = new Server(httpServer, {
       // origin이 없으면 (같은 origin 요청) 허용
       if (!origin) return callback(null, true);
       // 허용된 origin 또는 개발 환경에서 허용
-      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
       callback(new Error('CORS policy violation'));

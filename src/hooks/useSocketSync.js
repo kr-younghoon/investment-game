@@ -133,16 +133,9 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
       console.log('[useSocketSync] Socket 연결됨');
 
       // 관리자 인증은 AdminPage에서 비밀번호와 함께 수행
+      // 자동 로그인(PLAYER_JOIN)은 PlayerPage에서 조건부로 처리
       if (!isAdmin) {
-        // 플레이어는 연결 시 게임 상태 요청
         socket.emit('PLAYER_REQUEST_STATE');
-
-        // 저장된 닉네임으로 자동 재접속 (페이지 새로고침 시에도 동작)
-        const savedNickname = localStorage.getItem('mz_investment_nickname');
-        if (savedNickname) {
-          console.log('[useSocketSync] 저장된 닉네임으로 자동 참가:', savedNickname);
-          socket.emit('PLAYER_JOIN', savedNickname);
-        }
       }
       // 전광판은 거래 로그를 구독
       if (isDisplay) {
@@ -184,15 +177,9 @@ export function useSocketSync(isAdmin = false, isDisplay = false) {
       );
 
       // 관리자 인증 재시도는 AdminPage에서 처리
+      // 자동 로그인(PLAYER_JOIN)은 PlayerPage에서 조건부로 처리
       if (!isAdmin) {
-        // 플레이어는 재연결 시 게임 상태 요청
         socket.emit('PLAYER_REQUEST_STATE');
-
-        // 저장된 닉네임으로 자동 재접속
-        const savedNickname = localStorage.getItem('mz_investment_nickname');
-        if (savedNickname) {
-          socket.emit('PLAYER_JOIN', savedNickname);
-        }
       }
       // 전광판은 재연결 시에도 다시 등록
       if (isDisplay) {
