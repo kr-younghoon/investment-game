@@ -387,7 +387,7 @@ class StateManager {
     }
 
     // totalRounds 업데이트
-    this.gameSettings.totalRounds = this.gameState.scenarios.length + 1;
+    this.gameSettings.totalRounds = this.gameState.scenarios.length;
 
     // 재시작 시 자동 재개 설정
     if (!resumeOnRestart) {

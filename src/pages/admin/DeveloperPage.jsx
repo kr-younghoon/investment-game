@@ -120,7 +120,7 @@ export default function DeveloperPage({
   const isFirstRound = gameState.currentRound === 0;
   // totalRounds는 서버에서 전달, 없으면 fallback
   const maxRounds = gameState.totalRounds
-    || (gameState.isPracticeMode ? 4 : initialScenarios.length + 1);
+    || (gameState.isPracticeMode ? 3 : initialScenarios.length);
   const isLastRound =
     gameState.currentRound >= maxRounds - 1;
 

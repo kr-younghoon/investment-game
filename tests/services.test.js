@@ -179,9 +179,9 @@ console.log('[11] startGameWithScenario 기본 동작');
   assert(gs.stockPrices['sc1'][0] === 50000, 'sc1 초기가 50000');
   assert(gs.stockPrices['sc2'][0] === 30000, 'sc2 초기가 30000');
 
-  // 총 라운드 수 확인 (시나리오 수 + 1)
+  // 총 라운드 수 확인 (시나리오 수 = 라운드 수)
   const settings = stateManager.getGameSettings();
-  assert(settings.totalRounds === 2, 'totalRounds === 2 (1 시나리오 + 1)');
+  assert(settings.totalRounds === 1, 'totalRounds === 1 (시나리오 수와 동일)');
 
   // 정리
   stateManager.resetForNewGame(false);

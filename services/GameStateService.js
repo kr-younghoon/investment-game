@@ -37,8 +37,8 @@ export class GameStateService {
   calculateNextRoundPrices() {
     const gameState = this.state.getGameState();
     const scenarios = gameState.scenarios;
-    // 라운드 1은 초기 상태, 라운드 2부터 시나리오 적용 (총 라운드 = 시나리오 수 + 1)
-    const maxRounds = scenarios.length + 1;
+    // 시나리오 수 = 라운드 수 (1:1 매핑, 라운드 1부터 시나리오 적용)
+    const maxRounds = scenarios.length;
 
     const nextRound = gameState.currentRound + 1;
     const isLastRound = nextRound >= maxRounds;
@@ -51,10 +51,10 @@ export class GameStateService {
           currentNews: lastScenario.headline,
           currentNewsBriefing: lastScenario.newsBriefing || [],
           isLastRound: true,
-          currentRound: nextRound,
+          // currentRound 은 유지 (마지막 라운드 번호 그대로 표시)
         });
         console.log(
-          `[calculateNextRoundPrices] 마지막 라운드 뉴스 설정 - currentRound: ${nextRound}`
+          `[calculateNextRoundPrices] 마지막 라운드 뉴스 설정 - currentRound: ${gameState.currentRound}`
         );
       }
       return false;
@@ -64,36 +64,8 @@ export class GameStateService {
 
     const stockList = this.getActiveStocks();
 
-    let scenarioIndex;
-    if (gameState.isPracticeMode) {
-      if (nextRound === 1) {
-        this.state.updateGameState({
-          currentRound: nextRound,
-          currentNews: '',
-          currentNewsBriefing: [],
-        });
-        return true;
-      }
-      scenarioIndex = nextRound - 2;
-    } else {
-      if (nextRound === 1) {
-        stockList.forEach((stock) => {
-          const currentPrice =
-            gameState.stockPrices[stock.id]?.[gameState.currentRound] || stock.basePrice;
-          if (!gameState.stockPrices[stock.id]) {
-            gameState.stockPrices[stock.id] = [];
-          }
-          gameState.stockPrices[stock.id][nextRound] = currentPrice;
-        });
-        this.state.updateGameState({
-          currentRound: nextRound,
-          currentNews: '',
-          currentNewsBriefing: [],
-        });
-        return true;
-      }
-      scenarioIndex = nextRound - 2;
-    }
+    // 라운드 1 → 시나리오[0], 라운드 2 → 시나리오[1], ...
+    const scenarioIndex = nextRound - 1;
 
     const scenario =
       scenarioIndex >= 0 && scenarioIndex < scenarios.length
@@ -402,7 +374,7 @@ export class GameStateService {
 
     // 게임 설정 업데이트 (라운드 수 = 시나리오 수 + 1)
     this.state.setGameSettings({
-      totalRounds: customRounds.length + 1,
+      totalRounds: customRounds.length,
     });
 
     // 주식 가격 초기화 (커스텀 주식 사용)

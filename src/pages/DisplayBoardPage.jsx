@@ -217,7 +217,7 @@ export default function DisplayBoardPage() {
                   transition={{ duration: 0.4 }}
                   className="font-bold text-white/80"
                 >
-                  ROUND {gameState.currentRound + 1} / {scenarios.length + 1}
+                  ROUND {gameState.currentRound + 1} / {scenarios.length}
                 </motion.span>
                 {gameState.isPracticeMode && (
                   <span className="px-3 py-0.5 bg-yellow-500/20 text-yellow-300 rounded-lg font-semibold text-sm border border-yellow-500/30">

@@ -55,7 +55,7 @@ export function registerGameHandlers(socket, io, services) {
 
     // 게임 설정 업데이트
     stateManager.setGameSettings({
-      totalRounds: practiceScenarios.length + 1,
+      totalRounds: practiceScenarios.length,
     });
 
     // 주식 가격 초기화
@@ -175,7 +175,7 @@ export function registerGameHandlers(socket, io, services) {
 
     // 게임 설정 업데이트
     stateManager.setGameSettings({
-      totalRounds: initialScenarios.length + 1,
+      totalRounds: initialScenarios.length,
     });
 
     // 주식 가격 초기화
